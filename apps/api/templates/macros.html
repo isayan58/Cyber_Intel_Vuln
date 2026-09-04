@@ -147,6 +147,20 @@
       <text x="118" y="16" text-anchor="middle" class="vp-col">{{ proof.baseline }} alone</text>
       <text x="500" y="16" text-anchor="middle" class="vp-col">With your estate context</text>
 
+      {# Baseline positions not taken by any CVE in the final top N: label them
+         rather than leaving a gap that looks like a missing row. #}
+      {% set shown = proof.rows | map(attribute='rank_by_cvss') | list %}
+      {% for slot in range(1, n + 1) %}
+        {% if slot not in shown %}
+          {% set ys = 46 + 34 * (slot - 1) %}
+          <rect x="14" y="{{ ys - 12 }}" width="182" height="24" rx="6"
+                class="vp-chip" opacity=".45"/>
+          <text x="24" y="{{ ys + 4 }}" class="vp-text-dim">#{{ slot }}</text>
+          <text x="186" y="{{ ys + 4 }}" text-anchor="end" class="vp-text-dim"
+                >dropped out of the top {{ n }}</text>
+        {% endif %}
+      {% endfor %}
+
       {% for row in proof.rows %}
         {% set y2 = 46 + 34 * loop.index0 %}
         {% set y1 = 46 + 34 * (row.rank_by_cvss - 1) %}

@@ -298,14 +298,15 @@ def executive_posture(db: Database | None = None) -> dict[str, Any]:
     )
     services = conn.query(
         f"""
-        SELECT business_service, tier,
+        SELECT business_service,
+               min(CASE WHEN tier IS NULL THEN 99 ELSE tier END) AS tier,
                count(DISTINCT cve_id) AS issues,
                count(DISTINCT asset_id) AS assets,
                max(score) AS worst_score,
                sum(CASE WHEN kev_listed THEN 1 ELSE 0 END) AS exploited,
                bool_or(external_customer_facing) AS customer_facing
         {base} AND business_service IS NOT NULL AND score >= 60
-        GROUP BY business_service, tier ORDER BY worst_score DESC LIMIT 8
+        GROUP BY business_service ORDER BY worst_score DESC LIMIT 8
         """
     )
     return {
