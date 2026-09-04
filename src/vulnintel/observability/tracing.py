@@ -185,7 +185,8 @@ def node_latency_summary(db: Database | None = None) -> list[dict[str, Any]]:
         "       round(avg(latency_ms), 1) AS avg_latency_ms, "
         "       max(latency_ms) AS max_latency_ms, "
         "       sum(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS errors "
-        "FROM agent_span GROUP BY node ORDER BY avg_latency_ms DESC"
+        "FROM agent_span WHERE node IS NOT NULL AND node <> 'unknown' "
+        "GROUP BY node ORDER BY avg_latency_ms DESC"
     )
 
 

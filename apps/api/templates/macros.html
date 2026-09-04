@@ -75,8 +75,7 @@
           <circle class="donut-arc" cx="75" cy="75" r="58" fill="none"
                   stroke="{{ colour }}" stroke-width="17"
                   data-series="{{ row.band }}"
-                  data-dash="{{ '%.2f'|format(dash - 2.5 if dash > 6 else dash) }} 364.4"
-                  stroke-dasharray="0 364.4"
+                  stroke-dasharray="{{ '%.2f'|format(dash - 2.5 if dash > 6 else dash) }} 364.4"
                   stroke-dashoffset="-{{ '%.2f'|format(ns.offset) }}"
                   data-tip="<b>{{ row.band }} — {{ meta.get(row.band, ('','')) [1] }}</b><br>
                             {{ row.n }} of {{ total }} issues
@@ -124,8 +123,8 @@
           </span>
         </div>
         <div class="bar-track">
-          <div class="bar-fill" data-width="{{ '%.1f'|format(pct) }}%"
-               style="background: {{ colour }}"></div>
+          <div class="bar-fill" style="width: {{ '%.1f'|format(pct) }}%;
+               background: {{ colour }}"></div>
         </div>
       </div>
     {% endfor %}
@@ -205,13 +204,21 @@
 
 {# ---- distribution histogram --------------------------------------------- #}
 {% macro histogram(buckets, colour='var(--series-1)', height=110) %}
+  {# A real backlog is heavily skewed: hundreds of thousands of low-priority
+     items against a few thousand urgent ones. On a linear scale the urgent
+     bars vanish, which is the opposite of the message. Bars are therefore
+     square-rooted so the small ones stay visible, and every bar is labelled
+     with its true count so the shape never has to be read off the height. #}
   {% set peak = (buckets | map(attribute='n') | list | max) if buckets else 1 %}
   <div class="flex items-end gap-1.5" style="height: {{ height }}px" data-series-group>
     {% for b in buckets %}
-      {% set pct = (100 * b.n / peak) if peak else 0 %}
+      {% set pct = (100 * (b.n / peak) ** 0.5) if peak and b.n else 0 %}
       <div class="flex-1 flex flex-col justify-end h-full histo-col" data-series="{{ b.label }}"
-           data-tip="<b>{{ b.label }}</b><br>{{ '{:,}'.format(b.n) }} findings">
-        <div class="histo-bar" data-width="100%"
+           data-tip="<b>Priority {{ b.low }}–{{ b.high }}</b><br>{{ '{:,}'.format(b.n) }} issues">
+        <div class="text-[9px] t2 text-center mb-1 tabular-nums whitespace-nowrap">
+          {% if b.n >= 1000 %}{{ (b.n / 1000)|round(1) }}k{% else %}{{ b.n }}{% endif %}
+        </div>
+        <div class="histo-bar"
              style="height: {{ '%.1f'|format(pct) }}%; background: {{ b.colour or colour }}"></div>
       </div>
     {% endfor %}
@@ -254,8 +261,8 @@
           </span>
         </div>
         <div class="bar-track">
-          <div class="bar-fill" data-width="{{ '%.1f'|format(100 * contribution / peak if peak else 0) }}%"
-               style="background: {{ colour }}"></div>
+          <div class="bar-fill" style="width: {{ '%.1f'|format(100 * contribution / peak if peak else 0) }}%;
+               background: {{ colour }}"></div>
         </div>
       </div>
     {% endfor %}
@@ -287,7 +294,7 @@
       {{ value|round(0)|int if score is not none else '—' }}
     </span>
     <div class="scorebar flex-1">
-      <span data-width="{{ value }}%" style="background: {{ colour }}"></span>
+      <span style="width: {{ value }}%; background: {{ colour }}"></span>
     </div>
   </div>
 {% endmacro %}

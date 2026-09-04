@@ -16,8 +16,9 @@
 <section class="grid grid-cols-1 xl:grid-cols-[1.4fr_1fr] gap-5">
   <div class="card card-lit p-5 fade-up">
     {{ ui.chart_head('The whole backlog at a glance',
-       'Where every open issue sits on the 0–100 priority scale. A healthy estate is heavy on the
-        left. Hover any bar for the count.',
+       'Where every open issue sits on the 0–100 priority scale. Bar heights are square-rooted so
+        the small urgent groups stay visible against the large routine ones — the number above
+        each bar is the true count.',
        'all ' + '{:,}'.format(summary.open_findings) + ' open issues') }}
     {{ ui.histogram(distribution) }}
     <div class="legend mt-4">

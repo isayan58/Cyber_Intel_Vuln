@@ -32,8 +32,7 @@
       <span class="text-[11.5px] t2 truncate">{{ span.node }}</span>
       <div class="h-[16px] rounded" style="background: var(--grid)">
         <div class="h-full rounded-r flex items-center justify-end pr-1.5"
-             data-width="{{ '%.1f'|format(100 * (span.latency_ms or 0) / peak if peak else 0) }}%"
-             style="width:0; background: {{ 'var(--critical)' if span.status == 'error' else 'var(--series-1)' }};
+             style="width: {{ '%.1f'|format(100 * (span.latency_ms or 0) / peak if peak else 0) }}%; background: {{ 'var(--critical)' if span.status == 'error' else 'var(--series-1)' }};
                     transition: width .8s cubic-bezier(.2,.75,.3,1)">
         </div>
       </div>

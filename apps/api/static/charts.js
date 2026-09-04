@@ -87,15 +87,25 @@
         minimumFractionDigits: decimals, maximumFractionDigits: decimals,
       }) + suffix;
 
-    if (reduceMotion) { el.textContent = fmt(target); return; }
+    // Write the true value first. The animation is decoration; if rAF never
+    // runs — headless capture, a background tab, a throttled device — the
+    // number must still be correct rather than frozen at zero. A stuck "0"
+    // beside "issues being exploited now" is worse than no animation at all.
+    el.textContent = fmt(target);
+    if (reduceMotion || typeof requestAnimationFrame !== "function") return;
 
     const start = performance.now();
     const dur = Math.min(1100, 380 + Math.abs(target) * 1.6);
-    (function frame(now) {
+    let finished = false;
+    const finish = () => { if (!finished) { finished = true; el.textContent = fmt(target); } };
+
+    requestAnimationFrame(function frame(now) {
       const p = Math.min((now - start) / dur, 1);
+      if (finished) return;
       el.textContent = fmt(target * (1 - Math.pow(1 - p, 3)));
-      if (p < 1) requestAnimationFrame(frame);
-    })(start);
+      if (p < 1) requestAnimationFrame(frame); else finish();
+    });
+    setTimeout(finish, dur + 400);  // belt and braces
   }
 
   /* ---------------------------------------------------------------------
@@ -134,8 +144,15 @@
                 "[data-height]:not([data-revealed]), [data-count]:not([data-revealed])";
     (root || document).querySelectorAll(sel).forEach((el) => {
       el.setAttribute("data-revealed", "1");
-      if (revealObserver && el.getBoundingClientRect) revealObserver.observe(el);
-      else reveal(el);
+      if (revealObserver && el.getBoundingClientRect) {
+        revealObserver.observe(el);
+        // If the element never intersects (print, headless capture, a
+        // collapsed container) reveal it anyway rather than leaving a
+        // zero-width bar that reads as "no data".
+        setTimeout(() => reveal(el), 1800);
+      } else {
+        reveal(el);
+      }
     });
   }
 

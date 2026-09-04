@@ -642,3 +642,18 @@ body > * { position: relative; z-index: 1; }
 .prov-pill::before {
   content: ""; width: 5px; height: 5px; border-radius: 99px; background: var(--pc);
 }
+
+/* Bars carry their true width inline and grow via transform, so they are
+   correct with JavaScript disabled and animated when it is available. */
+.bar-fill, .scorebar > span, .histo-bar {
+  animation: growx .9s cubic-bezier(.2,.75,.3,1) both;
+  transform-origin: left center;
+}
+.histo-bar { animation-name: growy; transform-origin: bottom center; }
+@keyframes growx { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes growy { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.donut-arc { animation: fadein .7s ease-out both; }
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .bar-fill, .scorebar > span, .histo-bar, .donut-arc { animation: none; }
+}
