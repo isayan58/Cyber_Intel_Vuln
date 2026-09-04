@@ -344,6 +344,27 @@ def build() -> Path:
          "Not a saving in itself; it converts a class of silent, expensive "
          "misdiagnosis into a one-line answer."),
 
+        ("2.8", "Request shape follows the model", "Reliability",
+         "The first verification run of the tiering change failed on all five fast-tier "
+         "agents with 'adaptive thinking is not supported on this model'. Opus-specific "
+         "parameters were being sent to Haiku unconditionally, and every affected agent "
+         "silently fell back to its non-model path.",
+         "The provider now selects the request shape from the model family: thinking and "
+         "output_config.effort are attached only for models that accept them, matched on "
+         "prefix so dated snapshots resolve correctly.",
+         "Without this the tiering change was a net negative — it disabled five agents "
+         "while appearing to succeed. Found only because the run was measured rather "
+         "than assumed to work."),
+
+        ("2.9", "Grouped scores are explainable", "Accuracy + cost",
+         "Executive answers group findings by CVE. Grouped rows had no finding_id, so no "
+         "score breakdown was ever fetched, and the critic correctly refused to accept "
+         "five scores it could not trace. Each refusal cost a full re-plan cycle.",
+         "rank_findings now returns an exemplar_finding_id on every grouped row, and "
+         "risk_remediation resolves a component breakdown from it.",
+         "Removes one of the two remaining causes of re-planning, which is the dominant "
+         "cost driver."),
+
         ("2.7", "Degraded runs declare themselves", "Accuracy",
          "Three separate live runs completed with agents silently dead — the run "
          "reported success, the answer looked complete, and only the log showed "
@@ -366,14 +387,59 @@ def build() -> Path:
         bullet(doc, change, bold_prefix="Change made.  ")
         bullet(doc, effect, bold_prefix="Expected effect.  ")
 
-    # ---- 3. expected effect ----
-    doc.add_heading("3. Expected effect", level=1)
+    # ---- 3. measured effect ----
+    doc.add_heading("3. Measured effect", level=1)
+    para(doc,
+         "A verification run was executed against the live API after the changes. The "
+         "comparison below is like-for-like: both runs took two re-plan cycles, so the "
+         "difference is attributable to the optimisations rather than to a luckier path "
+         "through the graph.")
+    table(doc,
+          ["Metric", "Baseline (2 re-plans)", "Optimised (2 re-plans)", "Change"],
+          [["Wall clock", "537s", "427s", "-21%"],
+           ["Cost", "$0.795", "$0.519", "-35%"],
+           ["Opus input tokens", "51,887", "32,514", "-37%"],
+           ["Opus output tokens", "21,424", "12,913", "-40%"],
+           ["Haiku tokens", "0", "18,046 in / 3,078 out", "work moved off Opus"],
+           ["Cache reads", "0-4,662", "3,484", "prefix reuse working"],
+           ["Agent errors", "0-2 silent", "0", "silent failures eliminated"]],
+          [1.6, 1.6, 1.9, 1.5])
     callout(
-        doc, "Honesty note.",
-        "The figures below are projections derived from the measured baseline and "
-        "published per-token pricing. They are not yet a measurement. A verification "
-        "run is the correct next step, and the projection should be replaced with what "
-        "that run actually shows.", "FFF6E8",
+        doc, "Honest reading.",
+        "A 35% cost reduction on a run that still re-planned twice. The larger prize is "
+        "removing the re-plans themselves: a clean baseline run cost $0.53 in 133 "
+        "seconds, so eliminating both cycles matters more than any per-token saving. "
+        "Section 3.1 covers what still forces them.", "FFF6E8",
+    )
+
+    doc.add_heading("3.1 Why the optimised run still re-planned", level=2)
+    para(doc, "The critic rejected the draft twice, and on inspection it was right both "
+              "times. Two distinct causes:")
+    bullet(doc,
+           "In executive mode the ranking is grouped by CVE, and grouped rows carried no "
+           "finding_id — so explain_score was never called and the component breakdown "
+           "was absent. The critic saw five scores it could not substantiate and flagged "
+           "them, correctly. Fixed: grouped rows now carry an exemplar_finding_id and the "
+           "breakdown is always retrievable.",
+           bold_prefix="Unverifiable scores.  ")
+    bullet(doc,
+           "vulnerability_intel returns nothing because no CVE records are loaded, so the "
+           "draft's uncertainties section correctly says no vulnerability intelligence was "
+           "retrieved while the body quotes installed and fixed versions from the OSV path. "
+           "The critic flagged the inconsistency. This resolves when NVD is ingested "
+           "(section 4, item 2) and is not a code defect.",
+           bold_prefix="Missing NVD intelligence.  ")
+    para(doc,
+         "Both were found by the critic rather than by a human reading output, which is "
+         "the verification layer doing exactly what it was built for.",
+         size=9.5, italic=True, colour=MUTED)
+
+    doc.add_heading("3.2 Projection for the remaining work", level=2)
+    callout(
+        doc, "Not yet measured.",
+        "The figures below are projections from the measured baseline and published "
+        "pricing, not measurements. They should be replaced once a clean-run "
+        "verification is possible.", "FFF6E8",
     )
     table(doc,
           ["Change", "Cost", "Latency", "Confidence in estimate"],
@@ -387,7 +453,9 @@ def build() -> Path:
             "Low — depends entirely on repeat-question rate"],
            ["Single-sourced counts", "−30% amortised", "−30% amortised",
             "Medium — removes re-plans on 2 of 4 observed runs"],
-           ["Combined (not additive)", "≈ $0.15–0.25", "≈ 70–110s",
+           ["Removing both re-plan cycles", "-50 to -60%", "-60 to -65%",
+            "High — a clean baseline run was 133s / $0.53"],
+           ["Combined, clean run", "≈ $0.15-0.25", "≈ 70-110s",
             "To be confirmed by measurement"]],
           [1.7, 1.05, 1.05, 2.9])
 

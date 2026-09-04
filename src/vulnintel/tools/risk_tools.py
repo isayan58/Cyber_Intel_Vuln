@@ -86,11 +86,17 @@ def rank_findings(
         )
         for row in rows:
             row["top_assets"] = conn.query(
-                f"SELECT hostname, application_name, environment, internet_facing, "
-                f"installed_version, fixed_version, score FROM v_finding_enriched "
+                f"SELECT finding_id, hostname, application_name, environment, "
+                f"internet_facing, installed_version, fixed_version, score "
+                f"FROM v_finding_enriched "
                 f"WHERE {where} AND cve_id = ? ORDER BY score DESC LIMIT 5",
                 [*params, row["cve_id"]],
             )
+            # Carry an exemplar finding_id so the caller can pull a component
+            # breakdown for a grouped row. Without it the executive view quotes
+            # scores that nothing in the evidence can substantiate.
+            if row["top_assets"]:
+                row["exemplar_finding_id"] = row["top_assets"][0]["finding_id"]
         return {"mode": "by_cve", "count": len(rows), "findings": rows}
 
     rows = conn.query(

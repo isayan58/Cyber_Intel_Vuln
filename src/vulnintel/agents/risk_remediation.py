@@ -55,9 +55,12 @@ class RiskRemediationAgent(Agent):
 
         explanations = {}
         for finding in findings[: min(limit, 10)]:
-            finding_id = finding.get("finding_id")
+            # Grouped rows have no finding_id of their own; they carry an
+            # exemplar so the score breakdown is always obtainable.
+            finding_id = finding.get("finding_id") or finding.get("exemplar_finding_id")
             if finding_id is not None:
-                explanations[str(finding_id)] = self.tools.call(
+                key = str(finding.get("cve_id") or finding_id)
+                explanations[key] = self.tools.call(
                     "explain_score", finding_id=int(finding_id)
                 )
 
