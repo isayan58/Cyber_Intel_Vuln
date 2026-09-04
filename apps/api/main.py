@@ -176,6 +176,8 @@ def findings_page(
         {
             "page": "findings",
             "findings": result["findings"],
+            "summary": risk_tools.portfolio_summary(),
+            "distribution": risk_tools.score_distribution(),
             "filters": {
                 "kev_only": kev_only,
                 "internet_facing_only": internet_facing_only,
@@ -535,6 +537,21 @@ def api_traces(limit: int = Query(25, ge=1, le=200)):
         "tool_usage": tool_usage_summary(),
         "replan": replan_rate(),
     }
+
+
+@app.get("/api/traces/{run_id}/cost")
+def api_run_cost(run_id: str):
+    """Per-node model, tokens, latency and cost for one investigation."""
+    return risk_tools.run_cost_breakdown(run_id)
+
+
+@app.get("/fragments/run-cost/{run_id}", response_class=HTMLResponse)
+def run_cost_fragment(request: Request, run_id: str):
+    return templates.TemplateResponse(
+        request,
+        "fragments/run_cost.html",
+        {"cost": risk_tools.run_cost_breakdown(run_id)},
+    )
 
 
 @app.get("/api/traces/{run_id}")

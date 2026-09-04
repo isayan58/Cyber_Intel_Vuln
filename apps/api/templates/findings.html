@@ -1,42 +1,75 @@
 {% extends "base.html" %}
 {% import "macros.html" as ui %}
 
-{% block title %}Findings · VulnIntel AI{% endblock %}
-{% block eyebrow %}Prioritised queue{% endblock %}
-{% block heading %}Findings{% endblock %}
+{% block title %}Work queue · VulnIntel AI{% endblock %}
+{% block eyebrow %}Prioritised work queue{% endblock %}
+{% block heading %}What to fix, in order{% endblock %}
 {% block subheading %}
-  Every row is a confirmed-affected finding: the installed version was compared against the
-  vulnerable range by a deterministic function. Inconclusive comparisons are excluded here and
-  reported separately as unconfirmed.
+  Every row is confirmed: the installed version was compared against the vulnerable range by a
+  fixed rule, not judged by an AI. Where that comparison was inconclusive we say so rather than
+  guess — those are excluded here and counted separately.
 {% endblock %}
 
 {% block content %}
 
+<!-- ============ shape of the backlog ============ -->
+<section class="grid grid-cols-1 xl:grid-cols-[1.4fr_1fr] gap-5">
+  <div class="card card-lit p-5 fade-up">
+    {{ ui.chart_head('The whole backlog at a glance',
+       'Where every open issue sits on the 0–100 priority scale. A healthy estate is heavy on the
+        left. Hover any bar for the count.',
+       'all ' + '{:,}'.format(summary.open_findings) + ' open issues') }}
+    {{ ui.histogram(distribution) }}
+    <div class="legend mt-4">
+      <span class="legend-item"><span class="legend-swatch" style="background: var(--critical)"></span>80+ act now</span>
+      <span class="legend-item"><span class="legend-swatch" style="background: var(--serious)"></span>60–79 this week</span>
+      <span class="legend-item"><span class="legend-swatch" style="background: var(--warning)"></span>40–59 schedule</span>
+      <span class="legend-item"><span class="legend-swatch" style="background: var(--series-1)"></span>under 40 routine</span>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 gap-4 content-start">
+    {{ ui.decision(summary.kev_findings, 'being exploited now',
+       'Attackers are using these in the wild today', 'critical',
+       'Listed in the CISA Known Exploited Vulnerabilities catalogue') }}
+    {{ ui.decision(summary.internet_facing_findings, 'on internet-facing systems',
+       'Reachable without a foothold inside your network', 'serious') }}
+    {{ ui.decision(summary.sla_breaches, 'past your own deadline',
+       'Overdue against the policy your team set', 'warning') }}
+    {{ ui.decision(summary.unknown_verdicts, 'need manual confirmation',
+       'We could not verify the version — reported, not guessed', 'accent',
+       'Honesty check: these are NOT counted as affected anywhere in this product') }}
+  </div>
+</section>
+
+<!-- ============ filters ============ -->
 <section class="card card-lit p-4 fade-up">
   <form method="get" action="/findings" class="flex flex-wrap items-end gap-3">
     <div class="min-w-[220px] flex-1">
-      <label class="eyebrow block mb-1.5" for="application_name">Application</label>
+      <label class="eyebrow block mb-1.5" for="application_name">Filter by application</label>
       <input class="input" id="application_name" name="application_name"
-             value="{{ filters.application_name }}" placeholder="any application">
+             value="{{ filters.application_name }}" placeholder="all applications">
     </div>
     <div>
-      <label class="eyebrow block mb-1.5" for="limit">Rows</label>
+      <label class="eyebrow block mb-1.5" for="limit">Show</label>
       <select class="select" id="limit" name="limit" style="min-width:88px">
         {% for n in [25, 50, 100, 250] %}
-          <option value="{{ n }}" {% if filters.limit == n %}selected{% endif %}>{{ n }}</option>
+          <option value="{{ n }}" {% if filters.limit == n %}selected{% endif %}>{{ n }} rows</option>
         {% endfor %}
       </select>
     </div>
-    <label class="chip cursor-pointer !py-2 !px-3 select-none">
+    <label class="chip cursor-pointer !py-2 !px-3 select-none"
+           data-tip="Only issues attackers are actively exploiting">
       <input type="checkbox" name="kev_only" value="true" class="mr-1"
-             {% if filters.kev_only %}checked{% endif %}> Known exploited only
+             {% if filters.kev_only %}checked{% endif %}> Being exploited
     </label>
-    <label class="chip cursor-pointer !py-2 !px-3 select-none">
+    <label class="chip cursor-pointer !py-2 !px-3 select-none"
+           data-tip="Only systems reachable from the public internet">
       <input type="checkbox" name="internet_facing_only" value="true" class="mr-1"
-             {% if filters.internet_facing_only %}checked{% endif %}> Internet-facing only
+             {% if filters.internet_facing_only %}checked{% endif %}> Internet-facing
     </label>
     <button class="btn btn-primary" type="submit">Apply</button>
-    <a class="btn" href="/findings">Reset</a>
+    <a class="btn" href="/findings">Clear</a>
   </form>
 </section>
 
@@ -46,13 +79,13 @@
     <table class="tbl">
       <thead>
         <tr>
-          <th style="min-width:145px">Score</th>
-          <th>CVE / advisory</th>
-          <th>Asset</th>
-          <th>Application</th>
-          <th>Component</th>
-          <th>Signals</th>
-          <th>Deadline</th>
+          <th style="min-width:145px">Urgency</th>
+          <th>What is wrong</th>
+          <th>Which system</th>
+          <th>Which service</th>
+          <th>Upgrade to</th>
+          <th>Why urgent</th>
+          <th>By when</th>
           <th></th>
         </tr>
       </thead>
@@ -64,41 +97,41 @@
             <div class="mt-1.5">{{ ui.band_pill(row.score) }}</div>
           </td>
           <td>
-            <div class="mono text-[11.5px]">{{ row.cve_id or row.advisory_id or '—' }}</div>
-            <div class="t3 text-[10px]">
-              {{ row.cvss_severity or '—' }}
-              {% if row.cvss_base is not none %}· CVSS {{ '%.1f'|format(row.cvss_base) }}{% endif %}
-              {% if row.cvss_provider %}· {{ row.cvss_provider }}{% endif %}
-            </div>
+            <div class="text-[12px] font-medium">{{ row.product or '—' }}</div>
+            <div class="mono text-[10px] t3">{{ row.cve_id or row.advisory_id or '—' }}</div>
           </td>
           <td>
             <div class="text-[11.5px]">{{ row.hostname or '—' }}</div>
-            <div class="t3 text-[10px]">{{ row.environment }} · {{ row.business_criticality }}</div>
+            <div class="t3 text-[10px]">{{ row.environment }}</div>
           </td>
           <td>
-            <div class="text-[11.5px]">{{ row.application_name or '—' }}</div>
+            <div class="text-[11.5px]">{{ row.business_service or row.application_name or '—' }}</div>
             <div class="t3 text-[10px]">
-              {{ row.business_service or '' }}{% if row.tier %} · Tier {{ row.tier }}{% endif %}
+              {% if row.tier %}Tier {{ row.tier }}{% endif %}
+              {% if row.owner_team %}· {{ row.owner_team }}{% endif %}
             </div>
           </td>
           <td>
-            <div class="mono text-[11px]">{{ row.product or '—' }}</div>
-            <div class="t3 text-[10px]">
-              {{ row.installed_version }}
-              {% if row.fixed_version %}→ <span style="color: var(--good)">{{ row.fixed_version }}</span>
-              {% else %}· no fix known{% endif %}
+            <div class="mono text-[11px]">
+              {% if row.fixed_version %}
+                <span class="t3">{{ row.installed_version }}</span>
+                <span style="color: var(--good)"> → {{ row.fixed_version }}</span>
+              {% else %}
+                <span class="t3">{{ row.installed_version }}</span>
+                <span class="t3"> · no fix yet</span>
+              {% endif %}
             </div>
           </td>
           <td>{{ ui.signal_chips(row) }}</td>
           <td>
             <div class="mono text-[11px]">{{ row.sla_due_date or '—' }}</div>
-            <div class="t3 text-[10px]">
-              {% if row.sla_days %}SLA {{ row.sla_days }}d{% endif %}
-              {% if row.age_days is not none %}· open {{ row.age_days }}d{% endif %}
-            </div>
+            {% if row.age_days is not none %}
+              <div class="t3 text-[10px]">open {{ row.age_days }}d</div>
+            {% endif %}
           </td>
           <td>
-            <a class="btn !py-1 !px-2.5 !text-[10.5px]" href="/findings/{{ row.finding_id }}">Explain</a>
+            <a class="btn !py-1 !px-2.5 !text-[10.5px]" href="/findings/{{ row.finding_id }}"
+               data-tip="See exactly how this score was calculated">Why?</a>
           </td>
         </tr>
         {% endfor %}
@@ -106,16 +139,15 @@
     </table>
   </div>
   <div class="px-5 py-3 text-[10.5px] t3" style="border-top: 1px solid var(--border)">
-    Showing {{ findings|length }} finding{{ 's' if findings|length != 1 }}.
-    Ranking is by stored enterprise priority score — a project-specific model, not an
-    industry standard.
+    Showing {{ findings|length }} of {{ '{:,}'.format(summary.open_findings) }} open issues.
+    Order is calculated by a fixed formula and is reproducible — click <b>Why?</b> on any row
+    to see the arithmetic.
   </div>
 </section>
 {% else %}
-  {{ ui.empty('No findings match',
-      'Either the filters exclude everything, or vulnerability intelligence has not yet been
-       matched against the estate.',
-      '/system', 'Check pipeline status') }}
+  {{ ui.empty('Nothing matches those filters',
+     'Try clearing the filters, or check that intelligence has been matched against the estate.',
+     '/findings', 'Clear filters') }}
 {% endif %}
 
 {% endblock %}

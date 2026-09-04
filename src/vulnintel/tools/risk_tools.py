@@ -424,3 +424,85 @@ def _movement_reason(row: dict[str, Any], movement: int) -> str:
             drivers.append("low-tier service")
         return "Demoted: " + (", and ".join(drivers[:2]) if drivers else "limited exposure")
     return "Unchanged by enterprise context"
+
+
+def score_distribution(buckets: int = 10, db: Database | None = None) -> list[dict[str, Any]]:
+    """Shape of the whole backlog, not just the top rows.
+
+    A table shows you fifty findings out of half a million. This shows whether
+    the estate has a long tail of low-priority noise or a genuine cluster of
+    urgent work — which is a different decision.
+    """
+    conn = _db(db)
+    rows = conn.query(
+        """
+        SELECT CAST(least(floor(score / 10), 9) AS INTEGER) AS bucket, count(*) AS n
+        FROM v_finding_enriched
+        WHERE version_verdict = 'affected' AND status <> 'remediated' AND score IS NOT NULL
+        GROUP BY bucket ORDER BY bucket
+        """
+    )
+    counts = {int(r["bucket"]): int(r["n"]) for r in rows}
+    out = []
+    for b in range(buckets):
+        low = b * 10
+        colour = ("var(--critical)" if low >= 80 else "var(--serious)" if low >= 60
+                  else "var(--warning)" if low >= 40 else "var(--series-1)")
+        out.append({"label": f"{low}", "n": counts.get(b, 0), "colour": colour,
+                    "low": low, "high": low + 10})
+    return out
+
+
+def run_cost_breakdown(run_id: str, db: Database | None = None) -> dict[str, Any]:
+    """Per-node cost and latency for one investigation.
+
+    Makes the economics of an answer visible next to the answer itself: which
+    model handled which step, and what it cost. Prices are the published
+    per-million rates for each tier.
+    """
+    import json as _json
+
+    conn = _db(db)
+    price = {"deep": (5.0, 25.0), "mid": (2.0, 10.0), "fast": (1.0, 5.0)}
+    tier_model = {"deep": "Opus 5", "mid": "Sonnet 5", "fast": "Haiku 4.5"}
+    colour = {"deep": "var(--series-2)", "mid": "var(--series-1)",
+              "fast": "var(--series-3)", None: "var(--text-3)"}
+
+    nodes, total = [], 0.0
+    for span in conn.query(
+        "SELECT * FROM agent_span WHERE run_id = ? ORDER BY seq", [run_id]
+    ):
+        detail = {}
+        try:
+            detail = _json.loads(span.get("detail") or "{}")
+        except (ValueError, TypeError):
+            pass
+        tier = detail.get("tier")
+        tin = int(span.get("input_tokens") or 0)
+        tout = int(span.get("output_tokens") or 0)
+        cost = 0.0
+        if tier in price:
+            pi, po = price[tier]
+            cost = tin / 1e6 * pi + tout / 1e6 * po
+            total += cost
+        nodes.append({
+            "node": span["node"],
+            "tier": tier,
+            "model": tier_model.get(tier, "deterministic"),
+            "colour": colour.get(tier, "var(--text-3)"),
+            "input_tokens": tin,
+            "output_tokens": tout,
+            "latency_ms": span.get("latency_ms") or 0,
+            "tool_calls": len(detail.get("tool_calls") or []),
+            "cost": round(cost, 5),
+        })
+
+    for n in nodes:
+        n["cost_share"] = round(100 * n["cost"] / total, 1) if total else 0.0
+    return {
+        "run_id": run_id,
+        "nodes": nodes,
+        "total_cost": round(total, 4),
+        "total_latency_ms": sum(n["latency_ms"] for n in nodes),
+        "deterministic_nodes": [n["node"] for n in nodes if not n["tier"]],
+    }
