@@ -1,0 +1,85 @@
+name: threat_intel
+version: 1
+description: Summarises exploitation signals and judges whether ATT&CK mappings are defensible.
+effort: low
+max_tokens: 4000
+model_tier: fast
+
+system: |
+  You are the threat intelligence agent for VulnIntel AI. KEV membership, EPSS
+  scores and candidate ATT&CK mappings have already been looked up
+  deterministically and are given to you. You interpret them; you do not
+  fetch, compute or estimate them.
+
+  ## Interpreting exploitation signals
+
+  - KEV membership is binary and authoritative. Either the lookup returned a
+    listing or it did not. Never describe something as "likely in KEV".
+  - EPSS is a probability of exploitation activity in the next 30 days. Quote
+    the supplied value; never estimate one for a CVE that has no score. A
+    missing EPSS score means "not scored", not "low risk".
+  - A high EPSS with no KEV listing means predicted, not observed. Say which.
+
+  ## ATT&CK mappings
+
+  Candidate mappings arrive with a confidence and a stated basis (for example
+  a CWE bridge). Your job is to keep the defensible ones and drop the rest.
+
+  Keep a mapping when the basis genuinely supports it for this specific
+  vulnerability. Drop it when the basis is generic, the confidence is low, or
+  the technique does not fit how this vulnerability would actually be used.
+  Dropping a weak mapping is the correct outcome and is not a failure to be
+  helpful — an invented attacker narrative is worse than no narrative.
+
+  Never introduce a technique identifier that was not in the candidate list.
+
+user_template: |
+  ## CVEs under investigation
+  $cve_ids
+
+  ## Exploitation signals (deterministic lookups)
+  $signals
+
+  ## Candidate ATT&CK mappings
+  $attack_candidates
+
+  Summarise the exploitation picture.
+
+output_schema:
+  type: object
+  properties:
+    exploitation_summary:
+      type: string
+      description: Two to four sentences on the overall exploitation picture.
+    per_cve:
+      type: array
+      items:
+        type: object
+        properties:
+          cve_id: {type: string}
+          kev_listed: {type: boolean}
+          epss_available: {type: boolean}
+          interpretation: {type: string}
+        required: [cve_id, kev_listed, epss_available, interpretation]
+        additionalProperties: false
+    retained_mappings:
+      type: array
+      items:
+        type: object
+        properties:
+          cve_id: {type: string}
+          attack_id: {type: string}
+          justification: {type: string}
+        required: [cve_id, attack_id, justification]
+        additionalProperties: false
+    dropped_mappings:
+      type: array
+      items:
+        type: object
+        properties:
+          attack_id: {type: string}
+          reason: {type: string}
+        required: [attack_id, reason]
+        additionalProperties: false
+  required: [exploitation_summary, per_cve, retained_mappings, dropped_mappings]
+  additionalProperties: false

@@ -1,0 +1,121 @@
+# Golden retrieval set.
+#
+# Each case names the document that MUST appear in the top-k. Cases are written
+# against the *generated* policy corpus, so they stay valid as long as the
+# policy tables in risk/policy.py stay the source of truth.
+#
+# The adversarial block at the end is the part that matters: outdated policy,
+# unrelated CVE text, and prompt injection inside a document.
+
+cases:
+  - id: sla-kev
+    query: What is the remediation SLA for a vulnerability that is known to be exploited?
+    expect_doc: vulnerability-management-standard
+    expect_text: ["SLA-2", "7 days"]
+    note: KEV membership must override the CVSS-derived band.
+
+  - id: sla-kev-internet-facing
+    query: How quickly must we fix an actively exploited vulnerability on an internet-facing server?
+    expect_doc: vulnerability-management-standard
+    expect_text: ["SLA-1", "3 days"]
+
+  - id: sla-critical
+    query: What is the remediation window for a critical severity vulnerability?
+    expect_doc: vulnerability-management-standard
+    expect_text: ["30 days"]
+
+  - id: risk-acceptance-approver
+    query: Who must approve a risk acceptance for a KEV-listed internet-facing finding?
+    expect_doc: risk-acceptance-sop
+    expect_text: ["Chief Information Security Officer"]
+
+  - id: risk-acceptance-duration
+    query: How long can a risk acceptance last before it expires?
+    expect_doc: risk-acceptance-sop
+    expect_text: ["90 days", "180"]
+
+  - id: emergency-patch
+    query: When are we allowed to patch production outside the normal monthly cadence?
+    expect_doc: patch-management-policy
+    expect_text: ["Emergency"]
+
+  - id: change-freeze
+    query: Does the December change freeze block emergency security patches?
+    expect_doc: patch-management-policy
+    expect_text: ["exempt"]
+
+  - id: verification-required
+    query: Is a change record enough to close a vulnerability finding?
+    expect_doc: patch-management-policy
+    expect_text: ["verified", "rescan"]
+
+  - id: cto-escalation
+    query: When does the CTO have to be notified about a security incident?
+    expect_doc: incident-escalation-standard
+    expect_text: ["SEV-1"]
+
+  - id: build-gate
+    query: Does a build fail when a dependency has a known exploited vulnerability?
+    expect_doc: secure-sdlc-standard
+    expect_text: ["Build fails"]
+
+  - id: transitive-dependencies
+    query: Are transitive dependencies in scope for vulnerability management?
+    expect_doc: secure-sdlc-standard
+    expect_text: ["Transitive"]
+
+  - id: tier-definition
+    query: What makes an application Tier 1?
+    expect_doc: application-criticality-definitions
+    expect_text: ["Revenue-critical"]
+
+  - id: internet-facing-definition
+    query: Is a service behind the WAF still considered internet-facing?
+    expect_doc: application-criticality-definitions
+    expect_text: ["still classified as internet-facing"]
+
+  - id: no-fix-available
+    query: What do we do when there is no patch available for a vulnerability?
+    expect_doc: runbook-no-fix-available
+    expect_text: ["mitigation"]
+
+  - id: new-cve-runbook
+    query: What are the steps when a new critical CVE is published?
+    expect_doc: runbook-critical-cve-response
+    expect_text: ["Establish the facts"]
+
+  - id: unknown-verdict
+    query: Can we report an asset as affected if the version comparison is inconclusive?
+    expect_doc: vulnerability-management-standard
+    expect_text: ["unknown", "must not be reported as affected"]
+
+  - id: score-governance
+    query: Can an automated system change the enterprise priority score?
+    expect_doc: vulnerability-management-standard
+    expect_text: ["must not recalculate"]
+
+  - id: ingress-policy
+    query: Can an application port be exposed directly to the internet?
+    expect_doc: cloud-platform-hardening
+    expect_text: ["prohibited"]
+
+# Cases where the correct behaviour is to prefer the current policy, or to
+# return nothing at all.
+adversarial:
+  - id: superseded-must-not-win
+    query: What is the remediation window for a critical vulnerability?
+    must_not_rank_first: superseded-vulnerability-management-standard-v2
+    note: >
+      The superseded v2.0 standard says 14 days; the current v3.2 says 30.
+      A retriever that prefers the superseded document gives a confidently
+      wrong answer, so this asserts on rank, not just presence.
+
+  - id: version-conflict-surfaced
+    query: critical vulnerability remediation window days
+    expect_conflict: true
+    note: Both versions match; the retriever must report the conflict.
+
+  - id: out-of-scope
+    query: What is the company policy on expense reimbursement for travel?
+    expect_no_confident_match: true
+    note: The corpus does not cover this. Retrieving something anyway is the failure.

@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui %}
+
+{% block title %}System · VulnIntel AI{% endblock %}
+{% block eyebrow %}Configuration and pipeline{% endblock %}
+{% block heading %}System{% endblock %}
+{% block subheading %}
+  Runtime configuration, the tool surface behind the MCP boundary, prompt versions, and what
+  is actually loaded in the warehouse.
+{% endblock %}
+
+{% block content %}
+
+<section class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+  <div class="card card-lit p-5 fade-up">
+    <h2 class="text-[13px] font-semibold mb-4">Runtime</h2>
+    <div class="space-y-2.5 text-[11.5px]">
+      {% for key, value in settings.items() %}
+      <div class="flex justify-between gap-3 items-baseline">
+        <span class="t2">{{ key.replace('_', ' ') }}</span>
+        <span class="mono t1">{{ value }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card card-lit p-5 fade-up lg:col-span-2">
+    <h2 class="text-[13px] font-semibold mb-4">Feed status</h2>
+    {% if freshness %}
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+      {% for feed in freshness %}
+      <div class="p-3 rounded-lg" style="background: var(--surface-2); border: 1px solid var(--border)">
+        <div class="flex items-center gap-1.5 mb-1">
+          <span class="w-1.5 h-1.5 rounded-full"
+                style="background: {{ 'var(--good)' if feed.last_success else 'var(--text-3)' }};
+                       box-shadow: 0 0 7px currentColor"></span>
+          <span class="text-[11px] font-medium uppercase tracking-wide">{{ feed.source }}</span>
+        </div>
+        <div class="text-[10px] t2 mono">
+          {{ feed.last_success.strftime('%d %b %H:%M') if feed.last_success else 'never run' }}
+        </div>
+        <div class="text-[9.5px] t3">{{ feed.run_count }} runs, {{ feed.failure_count }} failed</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-[11.5px] t3">
+      No ingestion recorded. Start with
+      <code class="mono">vulnintel ingest kev epss</code> — both are small and complete in seconds.
+    </p>
+    {% endif %}
+  </div>
+</section>
+
+<!-- ===== prompts ===== -->
+<section class="card card-lit fade-up overflow-hidden">
+  <div class="px-5 py-4 flex items-center justify-between flex-wrap gap-3"
+       style="border-bottom: 1px solid var(--border)">
+    <div>
+      <h2 class="text-[13px] font-semibold">Prompts</h2>
+      <p class="text-[10.5px] t3 mt-0.5">
+        Every prompt lives in <code class="mono">prompts/*.yaml</code> and is loaded at call time.
+        Edit a file and reload — no restart, and the version is recorded on each run.
+      </p>
+    </div>
+    <button class="btn" hx-post="/fragments/prompts/reload" hx-target="#prompt-table" hx-swap="innerHTML">
+      <svg viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M20 11A8 8 0 0 0 6.3 5.7L2 10M4 13a8 8 0 0 0 13.7 5.3L22 14" stroke-linecap="round"/>
+        <path d="M2 5v5h5M22 19v-5h-5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Reload prompts
+    </button>
+  </div>
+  <div id="prompt-table">
+    {% include "fragments/prompt_table.html" %}
+  </div>
+</section>
+
+<!-- ===== tools / MCP ===== -->
+<section class="card card-lit fade-up overflow-hidden">
+  <div class="px-5 py-4" style="border-bottom: 1px solid var(--border)">
+    <h2 class="text-[13px] font-semibold">Tool surface</h2>
+    <p class="text-[10.5px] t3 mt-0.5">
+      One registry defines every tool. The LangGraph agents call it in-process; the MCP servers
+      expose the same definitions over the protocol, so the two cannot drift apart.
+      Each agent holds only the tools its role needs.
+    </p>
+  </div>
+  <div class="p-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+    {% set servers = tools | groupby('server') %}
+    {% for server, entries in servers %}
+    <div>
+      <div class="flex items-center gap-2 mb-2.5">
+        <span class="w-1.5 h-1.5 rounded-full" style="background: var(--accent); box-shadow: 0 0 7px var(--glow)"></span>
+        <h3 class="mono text-[11.5px] font-semibold">{{ server }}</h3>
+        <span class="chip !text-[9.5px]">{{ entries | list | length }}</span>
+      </div>
+      <div class="space-y-1.5">
+        {% for tool in entries %}
+        <div class="p-2.5 rounded-lg" style="background: var(--surface-2); border: 1px solid var(--border)">
+          <div class="mono text-[10.5px]" style="color: var(--accent)">{{ tool.name }}</div>
+          <div class="text-[10px] t3 mt-0.5 leading-snug">
+            {{ tool.description[:96] }}{% if tool.description|length > 96 %}…{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ===== warehouse ===== -->
+<section class="card card-lit fade-up overflow-hidden">
+  <div class="px-5 py-4" style="border-bottom: 1px solid var(--border)">
+    <h2 class="text-[13px] font-semibold">Warehouse contents</h2>
+    <p class="text-[10.5px] t3 mt-0.5">
+      Everything here is rebuildable from the immutable bronze layer with no network call.
+    </p>
+  </div>
+  <div class="p-5 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+    {% for table, count in tables.items() %}
+      {% if not table.startswith('v_') %}
+      <div class="p-2.5 rounded-lg" style="background: var(--surface-2); border: 1px solid var(--border)">
+        <div class="text-[15px] font-semibold tabular-nums {{ 'stat-accent' if count else '' }}"
+             data-count="{{ count if count > 0 else 0 }}">0</div>
+        <div class="mono text-[9.5px] t3 truncate" title="{{ table }}">{{ table }}</div>
+      </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+</section>
+
+{% endblock %}

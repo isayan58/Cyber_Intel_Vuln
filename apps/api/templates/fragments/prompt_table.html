@@ -1,0 +1,41 @@
+{% if reloaded %}
+<div class="px-5 py-2.5 text-[11px]"
+     style="background: color-mix(in srgb, var(--good) 10%, transparent);
+            color: var(--good); border-bottom: 1px solid var(--border)">
+  ✓ Prompts reloaded from disk — the next run uses the edited versions.
+</div>
+{% endif %}
+<div class="scroll-x">
+  <table class="tbl">
+    <thead>
+      <tr>
+        <th>Prompt</th><th>Version</th><th>Description</th>
+        <th>Effort</th><th>Schema</th><th class="num">System tokens</th><th>File</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for prompt in prompts %}
+      <tr>
+        <td class="mono text-[11.5px] font-medium">{{ prompt.name }}</td>
+        <td><span class="chip">v{{ prompt.version }}</span></td>
+        <td class="text-[11px] t2 max-w-[380px]">{{ prompt.description }}</td>
+        <td class="text-[11px] t2">{{ prompt.effort or 'default' }}</td>
+        <td>
+          {% if prompt.has_schema %}
+            <span class="chip chip-ok">structured</span>
+          {% else %}
+            <span class="chip">text</span>
+          {% endif %}
+        </td>
+        <td class="num tabular-nums t2">~{{ prompt.system_tokens }}</td>
+        <td class="mono text-[10px] t3 truncate max-w-[220px]" title="{{ prompt.path }}">
+          prompts/{{ prompt.name }}.yaml
+        </td>
+      </tr>
+      {% endfor %}
+      {% if not prompts %}
+      <tr><td colspan="7" class="text-center py-6 text-[12px] t3">No prompt files found.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>

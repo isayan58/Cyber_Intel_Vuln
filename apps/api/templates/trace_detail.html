@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui %}
+
+{% block title %}Trace {{ run_id[:8] }} · VulnIntel AI{% endblock %}
+{% block eyebrow %}Run trace{% endblock %}
+{% block heading %}{{ run.question or 'Trace' }}{% endblock %}
+{% block subheading %}
+  <span class="mono">{{ run_id }}</span> ·
+  {{ run.user_role or '—' }} · {{ run.status or 'unknown' }} ·
+  {{ run.latency_ms or '—' }} ms · {{ run.replan_count or 0 }} re-plan(s)
+{% endblock %}
+
+{% block headeraside %}
+  <a href="/traces" class="btn">← All traces</a>
+{% endblock %}
+
+{% block content %}
+
+{% if not run %}
+  {{ ui.empty('Trace not found', 'No run with this identifier is recorded.') }}
+{% else %}
+
+<!-- ===== span timeline ===== -->
+<section class="card card-lit p-5 fade-up">
+  <h2 class="text-[13px] font-semibold mb-4">Node timeline</h2>
+  {% set spans = run.spans or [] %}
+  {% set latencies = spans | map(attribute='latency_ms') | select('number') | list %}
+  {% set peak = latencies | max if latencies else 1 %}
+  <div class="space-y-2.5">
+    {% for span in spans %}
+    <div class="grid grid-cols-[150px_1fr_70px] items-center gap-3">
+      <span class="text-[11.5px] t2 truncate">{{ span.node }}</span>
+      <div class="h-[16px] rounded" style="background: var(--grid)">
+        <div class="h-full rounded-r flex items-center justify-end pr-1.5"
+             data-width="{{ '%.1f'|format(100 * (span.latency_ms or 0) / peak if peak else 0) }}%"
+             style="width:0; background: {{ 'var(--critical)' if span.status == 'error' else 'var(--series-1)' }};
+                    transition: width .8s cubic-bezier(.2,.75,.3,1)">
+        </div>
+      </div>
+      <span class="text-[11px] tabular-nums text-right t1">{{ span.latency_ms or 0 }} ms</span>
+    </div>
+    {% endfor %}
+    {% if not spans %}<p class="text-[11.5px] t3">No spans recorded.</p>{% endif %}
+  </div>
+</section>
+
+<!-- ===== tool calls ===== -->
+<section class="card card-lit fade-up overflow-hidden">
+  <div class="px-5 py-4" style="border-bottom: 1px solid var(--border)">
+    <h2 class="text-[13px] font-semibold">Tool call audit</h2>
+    <p class="text-[10.5px] t3 mt-0.5">
+      Arguments, row counts and outcome for every call, persisted at call time.
+    </p>
+  </div>
+  {% if run.tool_calls %}
+  <div class="scroll-x">
+    <table class="tbl">
+      <thead>
+        <tr><th>Tool</th><th>Server</th><th>Arguments</th><th class="num">Rows</th><th class="num">ms</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        {% for call in run.tool_calls %}
+        <tr>
+          <td class="mono text-[11px]">{{ call.tool_name }}</td>
+          <td><span class="chip">{{ call.server }}</span></td>
+          <td class="mono text-[10px] t2 max-w-[380px] truncate" title="{{ call.arguments }}">
+            {{ call.arguments }}
+          </td>
+          <td class="num tabular-nums">{{ call.row_count }}</td>
+          <td class="num tabular-nums">{{ call.latency_ms }}</td>
+          <td>
+            {% if call.status == 'ok' %}<span class="chip chip-ok">✓</span>
+            {% else %}<span class="chip chip-kev" title="{{ call.error }}">✗</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="p-6 text-[12px] t3">No tool calls recorded.</p>
+  {% endif %}
+</section>
+
+<!-- ===== final answer ===== -->
+{% if run.final_answer %}
+<section class="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-5">
+  <div class="card card-lit p-6 fade-up">
+    <h2 class="text-[13px] font-semibold mb-3">Answer as delivered</h2>
+    <pre id="answer-src" class="hidden">{{ run.final_answer.answer if run.final_answer is mapping else run.final_answer }}</pre>
+    <div id="answer" class="answer"></div>
+  </div>
+
+  <div class="space-y-5">
+    {% if run.final_answer is mapping and run.final_answer.critique %}
+    <div class="card card-lit p-5 fade-up">
+      <h2 class="text-[13px] font-semibold mb-3">Critic verdict</h2>
+      {% set critique = run.final_answer.critique %}
+      <div class="flex items-center gap-2 mb-3">
+        {% if critique.passed %}
+          <span class="chip chip-ok">✓ Passed</span>
+        {% else %}
+          <span class="chip chip-breach">⚠ Flagged</span>
+        {% endif %}
+        {% if critique.confidence is not none %}
+          <span class="chip">confidence {{ '%.0f'|format(critique.confidence * 100) }}%</span>
+        {% endif %}
+      </div>
+      {% if critique.summary %}<p class="text-[11.5px] t2 mb-3">{{ critique.summary }}</p>{% endif %}
+      {% for label, items, color in [
+          ('Unsupported claims', critique.unsupported_claims, 'var(--critical)'),
+          ('Contradictions', critique.contradictions, 'var(--serious)'),
+          ('Gaps', critique.gaps, 'var(--warning)')] %}
+        {% if items %}
+        <div class="mb-3">
+          <div class="eyebrow mb-1" style="color: {{ color }}">{{ label }}</div>
+          <ul class="text-[11px] t2 list-disc ml-4 space-y-0.5">
+            {% for item in items %}
+              <li>{{ item.claim if item is mapping and item.claim else (item.need if item is mapping and item.need else item) }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+      {% endfor %}
+
+      {% if critique.assertions %}
+      <div class="mt-4 pt-3" style="border-top: 1px solid var(--border)">
+        <div class="eyebrow mb-2">Deterministic assertions</div>
+        <div class="space-y-1.5">
+          {% for assertion in critique.assertions %}
+          <div class="flex items-start gap-2 text-[10.5px]">
+            <span style="color: {{ 'var(--good)' if assertion.passed else 'var(--critical)' }}">
+              {{ '✓' if assertion.passed else '✗' }}
+            </span>
+            <div class="min-w-0">
+              <div class="mono t1">{{ assertion.name }}</div>
+              <div class="t3">{{ assertion.detail }}</div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if run.final_answer is mapping and run.final_answer.prompt_versions %}
+    <div class="card card-lit p-5 fade-up">
+      <h2 class="text-[13px] font-semibold mb-3">Prompt versions used</h2>
+      <div class="space-y-1.5 text-[11px]">
+        {% for agent, version in run.final_answer.prompt_versions.items() %}
+        <div class="flex justify-between gap-3">
+          <span class="t2">{{ agent }}</span>
+          <span class="mono t1">{{ version or '—' }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      <p class="text-[10px] t3 mt-3">
+        Recorded per run, so an output regression can be traced to a specific prompt edit.
+      </p>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script>
+  var src = document.getElementById('answer-src');
+  var out = document.getElementById('answer');
+  if (src && out) {
+    out.innerHTML = window.marked ? marked.parse(src.textContent || '')
+                                  : (src.textContent || '').replace(/\n/g, '<br>');
+  }
+</script>
+{% endblock %}

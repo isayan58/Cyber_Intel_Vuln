@@ -1,0 +1,1 @@
+"""enterprise-assets-mcp."""

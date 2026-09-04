@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui %}
+
+{% block title %}Findings · VulnIntel AI{% endblock %}
+{% block eyebrow %}Prioritised queue{% endblock %}
+{% block heading %}Findings{% endblock %}
+{% block subheading %}
+  Every row is a confirmed-affected finding: the installed version was compared against the
+  vulnerable range by a deterministic function. Inconclusive comparisons are excluded here and
+  reported separately as unconfirmed.
+{% endblock %}
+
+{% block content %}
+
+<section class="card card-lit p-4 fade-up">
+  <form method="get" action="/findings" class="flex flex-wrap items-end gap-3">
+    <div class="min-w-[220px] flex-1">
+      <label class="eyebrow block mb-1.5" for="application_name">Application</label>
+      <input class="input" id="application_name" name="application_name"
+             value="{{ filters.application_name }}" placeholder="any application">
+    </div>
+    <div>
+      <label class="eyebrow block mb-1.5" for="limit">Rows</label>
+      <select class="select" id="limit" name="limit" style="min-width:88px">
+        {% for n in [25, 50, 100, 250] %}
+          <option value="{{ n }}" {% if filters.limit == n %}selected{% endif %}>{{ n }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <label class="chip cursor-pointer !py-2 !px-3 select-none">
+      <input type="checkbox" name="kev_only" value="true" class="mr-1"
+             {% if filters.kev_only %}checked{% endif %}> Known exploited only
+    </label>
+    <label class="chip cursor-pointer !py-2 !px-3 select-none">
+      <input type="checkbox" name="internet_facing_only" value="true" class="mr-1"
+             {% if filters.internet_facing_only %}checked{% endif %}> Internet-facing only
+    </label>
+    <button class="btn btn-primary" type="submit">Apply</button>
+    <a class="btn" href="/findings">Reset</a>
+  </form>
+</section>
+
+{% if findings %}
+<section class="card card-lit fade-up overflow-hidden">
+  <div class="scroll-x">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th style="min-width:145px">Score</th>
+          <th>CVE / advisory</th>
+          <th>Asset</th>
+          <th>Application</th>
+          <th>Component</th>
+          <th>Signals</th>
+          <th>Deadline</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in findings %}
+        <tr>
+          <td>
+            {{ ui.scorebar(row.score) }}
+            <div class="mt-1.5">{{ ui.band_pill(row.score) }}</div>
+          </td>
+          <td>
+            <div class="mono text-[11.5px]">{{ row.cve_id or row.advisory_id or '—' }}</div>
+            <div class="t3 text-[10px]">
+              {{ row.cvss_severity or '—' }}
+              {% if row.cvss_base is not none %}· CVSS {{ '%.1f'|format(row.cvss_base) }}{% endif %}
+              {% if row.cvss_provider %}· {{ row.cvss_provider }}{% endif %}
+            </div>
+          </td>
+          <td>
+            <div class="text-[11.5px]">{{ row.hostname or '—' }}</div>
+            <div class="t3 text-[10px]">{{ row.environment }} · {{ row.business_criticality }}</div>
+          </td>
+          <td>
+            <div class="text-[11.5px]">{{ row.application_name or '—' }}</div>
+            <div class="t3 text-[10px]">
+              {{ row.business_service or '' }}{% if row.tier %} · Tier {{ row.tier }}{% endif %}
+            </div>
+          </td>
+          <td>
+            <div class="mono text-[11px]">{{ row.product or '—' }}</div>
+            <div class="t3 text-[10px]">
+              {{ row.installed_version }}
+              {% if row.fixed_version %}→ <span style="color: var(--good)">{{ row.fixed_version }}</span>
+              {% else %}· no fix known{% endif %}
+            </div>
+          </td>
+          <td>{{ ui.signal_chips(row) }}</td>
+          <td>
+            <div class="mono text-[11px]">{{ row.sla_due_date or '—' }}</div>
+            <div class="t3 text-[10px]">
+              {% if row.sla_days %}SLA {{ row.sla_days }}d{% endif %}
+              {% if row.age_days is not none %}· open {{ row.age_days }}d{% endif %}
+            </div>
+          </td>
+          <td>
+            <a class="btn !py-1 !px-2.5 !text-[10.5px]" href="/findings/{{ row.finding_id }}">Explain</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="px-5 py-3 text-[10.5px] t3" style="border-top: 1px solid var(--border)">
+    Showing {{ findings|length }} finding{{ 's' if findings|length != 1 }}.
+    Ranking is by stored enterprise priority score — a project-specific model, not an
+    industry standard.
+  </div>
+</section>
+{% else %}
+  {{ ui.empty('No findings match',
+      'Either the filters exclude everything, or vulnerability intelligence has not yet been
+       matched against the estate.',
+      '/system', 'Check pipeline status') }}
+{% endif %}
+
+{% endblock %}

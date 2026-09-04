@@ -1,0 +1,35 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Data is regenerated, never committed
+data/bronze/
+data/warehouse/
+data/exports/
+*.duckdb
+*.duckdb.wal
+*.parquet
+
+# Secrets
+.env
+
+# Generated documents (regenerated from scripts/, never committed)
+*.docx
+~$*.docx
+docs/generated/
+
+# macOS AppleDouble sidecars. exFAT/FAT volumes cannot store extended
+# attributes, so macOS writes a binary ._name beside every file. They are
+# not matched by a rule for the file itself — ._.env slipped past a .env
+# rule and was staged before this was added.
+._*
+.AppleDouble/
+.Spotlight-V100
+.Trashes
+
+# Local artefacts
+.DS_Store
+apps/api/static/vendor/

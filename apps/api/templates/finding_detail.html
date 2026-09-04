@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui %}
+
+{% block title %}Finding {{ explanation.finding_id }} · VulnIntel AI{% endblock %}
+{% block eyebrow %}Score provenance{% endblock %}
+{% block heading %}
+  {{ finding.cve_id or finding.advisory_id or 'Finding' }}
+  <span class="t3 mono text-[13px] font-normal">#{{ explanation.finding_id }}</span>
+{% endblock %}
+{% block subheading %}
+  Why this was prioritised, component by component. Every value below was written by the
+  deterministic scorer and is stored — nothing here is recomputed for display.
+{% endblock %}
+
+{% block headeraside %}
+  <a href="/findings" class="btn">← Back to findings</a>
+{% endblock %}
+
+{% block content %}
+
+{% if not explanation.found %}
+  {{ ui.empty('Finding not found', 'This finding has no stored score. It may have been remediated or re-matched since.') }}
+{% else %}
+
+<section class="grid grid-cols-1 xl:grid-cols-[400px_1fr] gap-5">
+
+  <!-- ===== score waterfall ===== -->
+  <div class="card card-lit p-5 fade-up">
+    <div class="flex items-baseline justify-between mb-4">
+      <h2 class="text-[13px] font-semibold">How this score was calculated</h2>
+      {{ ui.band_pill(explanation.score) }}
+    </div>
+    {{ ui.waterfall(explanation) }}
+
+    {% if explanation.notes %}
+    <div class="mt-4 pt-3" style="border-top: 1px solid var(--border)">
+      <div class="eyebrow mb-1.5">Adjustments applied</div>
+      <ul class="text-[11px] t2 space-y-1 list-disc ml-4">
+        {% for note in explanation.notes %}<li>{{ note }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="space-y-5">
+
+    <!-- ===== evidence chain ===== -->
+    <div class="card card-lit p-5 fade-up">
+      <h2 class="text-[13px] font-semibold mb-4">Evidence chain</h2>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4 text-[12px]">
+        {% macro field(label, value, mono=false, tone='') %}
+          <div>
+            <div class="eyebrow mb-1">{{ label }}</div>
+            <div class="{{ 'mono text-[11.5px]' if mono else '' }} {{ tone }}">{{ value if value is not none and value != '' else '—' }}</div>
+          </div>
+        {% endmacro %}
+
+        {{ field('Version verdict', explanation.version_verdict,
+                 tone='font-semibold' + (' ' if explanation.version_verdict != 'affected' else '')) }}
+        {{ field('Match path', explanation.match_path, mono=true) }}
+        {{ field('Match confidence',
+                 '%.2f'|format(explanation.match_confidence) if explanation.match_confidence is not none else none) }}
+        {{ field('Installed version', finding.installed_version, mono=true) }}
+        {{ field('Fixed version', finding.fixed_version or 'none known', mono=true) }}
+        {{ field('Component', finding.product, mono=true) }}
+        {{ field('CVSS base', explanation.raw_cvss_base) }}
+        {{ field('CVSS provider', finding.cvss_provider, mono=true) }}
+        {{ field('EPSS percentile',
+                 '%.3f'|format(explanation.epss_percentile) if explanation.epss_percentile is not none else none) }}
+        {{ field('KEV listed', 'yes' if finding.kev_listed else 'no') }}
+        {{ field('KEV added', finding.kev_date_added) }}
+        {{ field('Ransomware use', 'known' if finding.known_ransomware_use else 'not known') }}
+      </div>
+    </div>
+
+    <!-- ===== policy obligation ===== -->
+    <div class="card card-lit p-5 fade-up">
+      <h2 class="text-[13px] font-semibold mb-4">Policy obligation</h2>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-[12px]">
+        <div>
+          <div class="eyebrow mb-1">SLA window</div>
+          <div class="font-semibold text-[15px]">{{ explanation.sla_days }} days</div>
+        </div>
+        <div>
+          <div class="eyebrow mb-1">Due</div>
+          <div class="mono text-[11.5px]">{{ explanation.sla_due_date or '—' }}</div>
+        </div>
+        <div>
+          <div class="eyebrow mb-1">Open for</div>
+          <div>{{ explanation.age_days if explanation.age_days is not none else '—' }} days</div>
+        </div>
+        <div>
+          <div class="eyebrow mb-1">Status</div>
+          {% if explanation.sla_breached %}
+            <span class="chip chip-breach">◷ Breached</span>
+          {% else %}
+            <span class="chip chip-ok">✓ Within SLA</span>
+          {% endif %}
+        </div>
+      </div>
+      <p class="text-[10.5px] t3 mt-4 leading-relaxed">
+        The SLA window comes from the same rule table the Vulnerability Management Standard is
+        generated from, so the deadline computed here and the obligation quoted by the policy
+        agent cannot disagree.
+      </p>
+    </div>
+
+    <!-- ===== enterprise context ===== -->
+    <div class="card card-lit p-5 fade-up">
+      <h2 class="text-[13px] font-semibold mb-4">Enterprise context</h2>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 text-[12px]">
+        {{ field('Asset', finding.hostname, mono=true) }}
+        {{ field('Environment', finding.environment) }}
+        {{ field('Criticality', finding.business_criticality) }}
+        {{ field('Internet-facing', 'yes' if finding.internet_facing else 'no') }}
+        {{ field('Application', finding.application_name) }}
+        {{ field('Business service', finding.business_service) }}
+        {{ field('Tier', finding.tier) }}
+        {{ field('Owner team', finding.owner_team, mono=true) }}
+        {{ field('Data classification', finding.data_classification) }}
+        {{ field('Last patched', finding.last_patch_date, mono=true) }}
+        {{ field('Compensating control', finding.compensating_controls) }}
+        {{ field('Region', finding.region, mono=true) }}
+      </div>
+    </div>
+
+    {% if finding.cve_description %}
+    <div class="card card-lit p-5 fade-up">
+      <h2 class="text-[13px] font-semibold mb-2.5">Vulnerability description</h2>
+      <p class="text-[12px] t2 leading-relaxed">{{ finding.cve_description }}</p>
+      {% if finding.cvss_vector %}
+        <div class="mt-3 mono text-[10.5px] t3">{{ finding.cvss_vector }}</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+  </div>
+</section>
+
+{% endif %}
+{% endblock %}

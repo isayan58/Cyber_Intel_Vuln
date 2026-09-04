@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui %}
+
+{% block title %}Dashboard · VulnIntel AI{% endblock %}
+{% block eyebrow %}Enterprise risk posture{% endblock %}
+{% block heading %}Dashboard{% endblock %}
+{% block subheading %}
+  Deterministic prioritisation across {{ inventory.assets|num }} synthetic assets and
+  {{ inventory.applications|num }} applications. Every score below was computed by a
+  scoring function, not a language model.
+{% endblock %}
+
+{% block headeraside %}
+  <a href="/ask" class="btn btn-primary">
+    <svg viewBox="0 0 24 24" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M13 2 4.5 12.5H11l-1 9.5 9.5-11.5H13l1-8.5Z" stroke-linejoin="round"/>
+    </svg>
+    Start an investigation
+  </a>
+{% endblock %}
+
+{% block content %}
+
+{% if not summary.open_findings %}
+  {{ ui.empty(
+      'No scored findings yet',
+      'The estate is generated but no vulnerability intelligence has been matched against it.
+       Run the ingestion and scoring pipeline to populate this dashboard.',
+      '/system', 'Check pipeline status') }}
+{% endif %}
+
+<!-- ============ Stat tiles ============ -->
+<section class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+  {{ ui.stat(summary.open_findings, 'Open affected findings', 'stat-accent',
+             hint='Deterministic "affected" verdicts only') }}
+  {{ ui.stat(summary.kev_findings, 'Known exploited (KEV)', 'stat-critical',
+             hint='CISA catalogue membership') }}
+  {{ ui.stat(summary.internet_facing_findings, 'On internet-facing assets', 'stat-warning',
+             hint='Reachable from untrusted networks') }}
+  {{ ui.stat(summary.sla_breaches, 'Past policy deadline', 'stat-warning',
+             hint='Breached the remediation SLA') }}
+</section>
+
+<!-- ============ Distribution + concentration ============ -->
+<section class="grid grid-cols-1 xl:grid-cols-3 gap-5">
+
+  <div class="card card-lit p-5 fade-up">
+    <div class="flex items-baseline justify-between mb-4">
+      <div>
+        <h2 class="text-[13px] font-semibold">Priority distribution</h2>
+        <p class="text-[10.5px] t3 mt-0.5">Bands derived from the stored score</p>
+      </div>
+    </div>
+    {{ ui.band_donut(summary.by_band, 'open findings') }}
+  </div>
+
+  <div class="card card-lit p-5 fade-up">
+    <div class="mb-4">
+      <h2 class="text-[13px] font-semibold">Highest-risk applications</h2>
+      <p class="text-[10.5px] t3 mt-0.5">By worst finding score</p>
+    </div>
+    {{ ui.hbar(summary.top_applications, 'application_name', 'max_score', 'var(--series-1)') }}
+  </div>
+
+  <div class="card card-lit p-5 fade-up">
+    <div class="mb-4">
+      <h2 class="text-[13px] font-semibold">Estate composition</h2>
+      <p class="text-[10.5px] t3 mt-0.5">Where the synthetic inventory sits</p>
+    </div>
+    <div class="space-y-3.5">
+      {{ ui.hbar(inventory.by_environment, 'environment', 'n', 'var(--series-3)') }}
+      <div class="divider !my-4"></div>
+      <div class="grid grid-cols-2 gap-3 text-[11.5px]">
+        <div>
+          <div class="t3 text-[10px]">Tier-1 applications</div>
+          <div class="font-semibold text-[15px] tabular-nums"
+               data-count="{{ inventory.tier1_applications }}">0</div>
+        </div>
+        <div>
+          <div class="t3 text-[10px]">Internet-facing assets</div>
+          <div class="font-semibold text-[15px] tabular-nums"
+               data-count="{{ inventory.internet_facing_assets }}">0</div>
+        </div>
+        <div>
+          <div class="t3 text-[10px]">Software records</div>
+          <div class="font-semibold text-[15px] tabular-nums"
+               data-count="{{ inventory.software_records }}">0</div>
+        </div>
+        <div>
+          <div class="t3 text-[10px]">Unconfirmed verdicts</div>
+          <div class="font-semibold text-[15px] tabular-nums"
+               data-count="{{ summary.unknown_verdicts }}">0</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Top risks ============ -->
+<section class="card card-lit fade-up overflow-hidden">
+  <div class="px-5 py-4 flex items-baseline justify-between flex-wrap gap-3"
+       style="border-bottom: 1px solid var(--border)">
+    <div>
+      <h2 class="text-[13px] font-semibold">Top enterprise risks</h2>
+      <p class="text-[10.5px] t3 mt-0.5">
+        One row per CVE, ranked by the worst-affected asset. Blast radius is a
+        count over confirmed-affected findings only.
+      </p>
+    </div>
+    <a href="/findings" class="btn !py-1.5 !text-[11px]">All findings →</a>
+  </div>
+
+  {% if top_risks %}
+  <div class="scroll-x">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th style="min-width:150px">CVE</th>
+          <th style="min-width:150px">Score</th>
+          <th>Signals</th>
+          <th class="num">Assets</th>
+          <th class="num">Apps</th>
+          <th class="num">CVSS</th>
+          <th class="num">EPSS</th>
+          <th>Fix</th>
+          <th>Due</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in top_risks %}
+        <tr>
+          <td>
+            <div class="mono text-[11.5px] font-medium">{{ row.cve_id }}</div>
+            <div class="t3 text-[10px] truncate max-w-[230px]" title="{{ row.cve_description }}">
+              {{ (row.cve_description or '')[:70] }}{% if (row.cve_description or '')|length > 70 %}…{% endif %}
+            </div>
+          </td>
+          <td>
+            {{ ui.scorebar(row.score) }}
+            <div class="mt-1.5">{{ ui.band_pill(row.score) }}</div>
+          </td>
+          <td>{{ ui.signal_chips(row) }}</td>
+          <td class="num tabular-nums">{{ row.asset_count }}</td>
+          <td class="num tabular-nums">{{ row.application_count }}</td>
+          <td class="num tabular-nums">{{ '%.1f'|format(row.cvss_base) if row.cvss_base is not none else '—' }}</td>
+          <td class="num tabular-nums">{{ '%.3f'|format(row.epss) if row.epss is not none else '—' }}</td>
+          <td class="mono text-[11px]">{{ row.fixed_version or '—' }}</td>
+          <td class="mono text-[11px] t2">{{ row.earliest_due_date or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="p-8 text-center text-[12px] t3">
+    No affected findings have been scored yet.
+  </div>
+  {% endif %}
+</section>
+
+<!-- ============ Feed freshness ============ -->
+<section class="card card-lit p-5 fade-up">
+  <div class="flex items-baseline justify-between mb-4">
+    <div>
+      <h2 class="text-[13px] font-semibold">Intelligence freshness</h2>
+      <p class="text-[10.5px] t3 mt-0.5">
+        Stale feeds are surfaced rather than silently trusted — the critic agent reads this too.
+      </p>
+    </div>
+  </div>
+
+  {% if freshness %}
+  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+    {% for feed in freshness %}
+    <div class="p-3 rounded-lg" style="background: var(--surface-2); border: 1px solid var(--border)">
+      <div class="flex items-center gap-1.5 mb-1.5">
+        <span class="w-1.5 h-1.5 rounded-full"
+              style="background: {{ 'var(--good)' if feed.last_success and not feed.failure_count else ('var(--warning)' if feed.last_success else 'var(--text-3)') }};
+                     box-shadow: 0 0 7px currentColor"></span>
+        <span class="text-[11px] font-medium uppercase tracking-wide">{{ feed.source }}</span>
+      </div>
+      <div class="text-[10px] t2 mono">
+        {{ feed.last_success.strftime('%d %b %H:%M') if feed.last_success else 'never' }}
+      </div>
+      <div class="text-[9.5px] t3 mt-0.5">
+        {{ feed.run_count }} run{{ 's' if feed.run_count != 1 }}{% if feed.failure_count %},
+        {{ feed.failure_count }} failed{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-[12px] t3">
+    No ingestion has run yet. Start with <code class="mono">vulnintel ingest kev epss</code> —
+    both are small and fast.
+  </p>
+  {% endif %}
+</section>
+
+{% endblock %}

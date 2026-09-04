@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui %}
+
+{% block title %}Traces · VulnIntel AI{% endblock %}
+{% block eyebrow %}Observability{% endblock %}
+{% block heading %}Traces{% endblock %}
+{% block subheading %}
+  Runs, node latency and tool usage are persisted to the warehouse rather than only to a hosted
+  tool — so reliability claims about this system are SQL queries, not screenshots.
+{% endblock %}
+
+{% block content %}
+
+<section class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+  {{ ui.stat(replan.runs or 0, 'Successful runs', 'stat-accent') }}
+  {{ ui.stat(replan.runs_with_replan or 0, 'Runs needing a re-plan', 'stat-warning',
+             hint='Critic found an actionable gap') }}
+  {{ ui.stat(replan.avg_replans or 0, 'Average re-plans per run', '', decimals=2) }}
+  {{ ui.stat(replan.avg_latency_ms or 0, 'Average latency (ms)', '') }}
+</section>
+
+<section class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+
+  <div class="card card-lit p-5 fade-up">
+    <div class="mb-4">
+      <h2 class="text-[13px] font-semibold">Latency by node</h2>
+      <p class="text-[10.5px] t3 mt-0.5">Mean wall-clock time per graph node, milliseconds</p>
+    </div>
+    {{ ui.hbar(node_latency, 'node', 'avg_latency_ms', 'var(--series-2)', ' ms') }}
+  </div>
+
+  <div class="card card-lit p-5 fade-up">
+    <div class="mb-4">
+      <h2 class="text-[13px] font-semibold">Tool call volume</h2>
+      <p class="text-[10.5px] t3 mt-0.5">Every call is audited with its arguments and row count</p>
+    </div>
+    {{ ui.hbar(tool_usage, 'tool_name', 'calls', 'var(--series-3)') }}
+  </div>
+</section>
+
+<section class="card card-lit fade-up overflow-hidden">
+  <div class="px-5 py-4" style="border-bottom: 1px solid var(--border)">
+    <h2 class="text-[13px] font-semibold">Recent investigations</h2>
+  </div>
+  {% if runs %}
+  <div class="scroll-x">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>Question</th><th>Role</th><th>Mode</th><th>Status</th>
+          <th class="num">Re-plans</th><th class="num">Latency</th><th class="num">Tokens</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in runs %}
+        <tr>
+          <td class="max-w-[330px]">
+            <div class="truncate text-[11.5px]" title="{{ run.question }}">{{ run.question }}</div>
+            <div class="mono text-[9.5px] t3">{{ run.run_id[:8] }} · {{ run.started_at.strftime('%d %b %H:%M:%S') if run.started_at else '' }}</div>
+          </td>
+          <td class="text-[11px] t2">{{ run.user_role }}</td>
+          <td class="text-[11px] t2">{{ run.response_mode or '—' }}</td>
+          <td>
+            {% if run.status == 'succeeded' %}<span class="chip chip-ok">✓ ok</span>
+            {% elif run.status == 'running' %}<span class="chip">running</span>
+            {% else %}<span class="chip chip-kev">✗ {{ run.status }}</span>{% endif %}
+          </td>
+          <td class="num tabular-nums">{{ run.replan_count }}</td>
+          <td class="num tabular-nums">{{ run.latency_ms or '—' }}</td>
+          <td class="num tabular-nums t2">
+            {{ (run.total_input_tokens or 0) + (run.total_output_tokens or 0) }}
+          </td>
+          <td><a class="btn !py-1 !px-2.5 !text-[10.5px]" href="/traces/{{ run.run_id }}">Trace</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="p-8 text-center text-[12px] t3">
+    No investigations recorded yet. <a href="/ask" style="color: var(--accent)">Run one →</a>
+  </div>
+  {% endif %}
+</section>
+
+{% endblock %}

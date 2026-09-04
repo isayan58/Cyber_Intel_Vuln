@@ -1,0 +1,6 @@
+{% import "macros.html" as ui %}
+{% if explanation.found %}
+  {{ ui.waterfall(explanation) }}
+{% else %}
+  <p class="text-[11.5px] t3">No stored score for finding {{ explanation.finding_id }}.</p>
+{% endif %}

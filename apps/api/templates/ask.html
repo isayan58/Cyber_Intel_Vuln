@@ -1,0 +1,526 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui %}
+
+{% block title %}Investigate · VulnIntel AI{% endblock %}
+{% block eyebrow %}Multi-agent investigation{% endblock %}
+{% block heading %}Investigate{% endblock %}
+{% block subheading %}
+  A LangGraph supervisor plans the investigation, fans out to specialist agents in parallel,
+  computes risk deterministically, and a critic verifies every claim before you see it.
+  The graph below lights up as it executes.
+{% endblock %}
+
+{% block content %}
+
+<!-- ============ Query ============ -->
+<section class="card card-lit p-5 fade-up">
+  <form id="ask-form" class="space-y-3">
+    <div class="grid grid-cols-1 lg:grid-cols-[1fr_190px_auto] gap-3 items-end">
+      <div>
+        <label class="eyebrow block mb-1.5" for="question">Question</label>
+        <input class="input" id="question" name="question" autocomplete="off"
+               placeholder="What are the five security issues our CTO should be most concerned about this week?"
+               value="What are the five security issues our CTO should be most concerned about this week?">
+      </div>
+      <div>
+        <label class="eyebrow block mb-1.5" for="user_role">Asking as</label>
+        <select class="select" id="user_role" name="user_role">
+          <option value="cto">CTO / Executive</option>
+          <option value="analyst" selected>Security analyst</option>
+          <option value="application_owner">Application owner</option>
+          <option value="ciso">CISO</option>
+        </select>
+      </div>
+      <button class="btn btn-primary h-[38px]" id="run-btn" type="submit">
+        <svg viewBox="0 0 24 24" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 3.5v17l14-8.5-14-8.5Z" stroke-linejoin="round"/>
+        </svg>
+        <span id="run-label">Run</span>
+      </button>
+    </div>
+
+    <div class="flex flex-wrap gap-2 pt-1">
+      <span class="eyebrow mr-1 self-center">Demos</span>
+      {% for text, role in examples %}
+        <button type="button" class="chip hover:!border-[var(--accent)] transition"
+                onclick="setExample(this.dataset.q, this.dataset.r)"
+                data-q="{{ text }}" data-r="{{ role }}">
+          {{ text[:52] }}{% if text|length > 52 %}…{% endif %}
+        </button>
+      {% endfor %}
+    </div>
+  </form>
+</section>
+
+<!-- ============ Live graph ============ -->
+<section class="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-5">
+
+  <div class="graph-wrap fade-up">
+    <div class="px-5 py-3.5 flex items-center justify-between flex-wrap gap-3"
+         style="border-bottom: 1px solid var(--border)">
+      <div>
+        <h2 class="text-[13px] font-semibold">LangGraph execution</h2>
+        <p class="text-[10.5px] t3 mt-0.5">
+          Nodes light up as they complete. Unselected nodes never run.
+        </p>
+      </div>
+      <div class="legend">
+        <span class="legend-item"><span class="legend-swatch" style="background: var(--border-strong); opacity:.5"></span>Idle</span>
+        <span class="legend-item"><span class="legend-swatch" style="background: var(--accent)"></span>Running</span>
+        <span class="legend-item"><span class="legend-swatch" style="background: var(--series-3)"></span>Complete</span>
+        <span class="legend-item"><span class="legend-swatch" style="background: var(--critical)"></span>Error</span>
+      </div>
+    </div>
+    <div class="p-4">
+      <svg id="agent-graph" viewBox="0 0 900 470" class="w-full" style="max-height: 470px"
+           role="img" aria-label="Agent workflow graph"></svg>
+    </div>
+  </div>
+
+  <div class="card card-lit fade-up flex flex-col">
+    <div class="px-4 py-3.5 flex items-center justify-between"
+         style="border-bottom: 1px solid var(--border)">
+      <h2 class="text-[13px] font-semibold">Event stream</h2>
+      <span id="run-timer" class="mono text-[11px] t3 tabular-nums">—</span>
+    </div>
+    <div id="eventlog" class="eventlog flex-1 py-2">
+      <p class="px-4 py-3 text-[11.5px] t3">Run an investigation to see the trace.</p>
+    </div>
+    <div id="run-stats" class="px-4 py-3 hidden text-[11px]"
+         style="border-top: 1px solid var(--border)">
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <div><div class="t3 text-[9.5px]">Nodes</div><div id="stat-nodes" class="font-semibold tabular-nums">0</div></div>
+        <div><div class="t3 text-[9.5px]">Tool calls</div><div id="stat-tools" class="font-semibold tabular-nums">0</div></div>
+        <div><div class="t3 text-[9.5px]">Re-plans</div><div id="stat-replans" class="font-semibold tabular-nums">0</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Verification + answer ============ -->
+<section id="verification" class="hidden fade-up">
+  <div class="card card-lit p-5">
+    <div class="flex items-center gap-3 mb-3">
+      <div id="verdict-icon" class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"></div>
+      <div class="min-w-0">
+        <h2 class="text-[13px] font-semibold">Critic verification</h2>
+        <p id="verdict-text" class="text-[11px] t2 mt-0.5"></p>
+      </div>
+    </div>
+    <div id="verdict-detail" class="text-[11.5px] t2 space-y-1.5"></div>
+  </div>
+</section>
+
+<section id="answer-section" class="hidden">
+  <div class="card card-lit p-6 fade-up">
+    <div class="flex items-baseline justify-between mb-4 flex-wrap gap-2">
+      <h2 class="text-[13px] font-semibold">Answer</h2>
+      <a id="trace-link" href="#" class="btn !py-1.5 !text-[11px]">View full trace →</a>
+    </div>
+    <div id="answer" class="answer"></div>
+    <div id="citations" class="mt-6 pt-4 hidden" style="border-top: 1px solid var(--border)">
+      <div class="eyebrow mb-2.5">Sources</div>
+      <div id="citation-list" class="flex flex-wrap gap-2"></div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script>
+/* =======================================================================
+   Agent graph — hand-laid out so the topology reads at a glance.
+   ======================================================================= */
+
+const NODES = {
+  plan:                { x: 450, y: 38,  w: 168, h: 40, label: 'Supervisor / Planner', sub: 'plans + routes' },
+  asset_exposure:      { x: 112, y: 150, w: 158, h: 40, label: 'Asset Exposure',       sub: 'SQL · inventory' },
+  vulnerability_intel: { x: 337, y: 150, w: 158, h: 40, label: 'Vulnerability Intel',  sub: 'NVD · OSV' },
+  threat_intel:        { x: 562, y: 150, w: 158, h: 40, label: 'Threat Intel',         sub: 'KEV · EPSS · ATT&CK' },
+  policy_rag:          { x: 787, y: 150, w: 158, h: 40, label: 'Policy RAG',           sub: 'hybrid retrieval' },
+  synthesize:          { x: 450, y: 262, w: 190, h: 42, label: 'Risk & Remediation',   sub: 'deterministic scoring' },
+  critic:              { x: 450, y: 352, w: 168, h: 40, label: 'Critic / Verification', sub: 'assertions + audit' },
+  replan:              { x: 168, y: 352, w: 150, h: 40, label: 'Targeted Re-plan',     sub: 'narrow gap list' },
+  respond:             { x: 450, y: 435, w: 168, h: 38, label: 'Response',             sub: 'role-adapted' }
+};
+
+const SPECIALISTS = ['asset_exposure', 'vulnerability_intel', 'threat_intel', 'policy_rag'];
+
+const EDGES = [
+  ...SPECIALISTS.map(s => ({ from: 'plan', to: s, kind: 'fan' })),
+  ...SPECIALISTS.map(s => ({ from: s, to: 'synthesize', kind: 'join' })),
+  { from: 'plan', to: 'synthesize', kind: 'fan' },
+  { from: 'synthesize', to: 'critic', kind: 'direct' },
+  { from: 'critic', to: 'respond', kind: 'direct' },
+  { from: 'critic', to: 'replan', kind: 'cycle' },
+  { from: 'replan', to: 'synthesize', kind: 'cycle' }
+];
+
+// The graph node names differ slightly from the agent names used in traces.
+const NODE_ALIASES = { supervisor: 'plan', responder: 'respond', risk_remediation: 'synthesize' };
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function el(tag, attrs, parent) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) node.setAttribute(k, v);
+  if (parent) parent.appendChild(node);
+  return node;
+}
+
+function edgePath(from, to) {
+  const a = NODES[from], b = NODES[to];
+  const x1 = a.x, y1 = a.y + a.h / 2;
+  const x2 = b.x, y2 = b.y - b.h / 2;
+  if (Math.abs(x1 - x2) < 4) return `M ${x1} ${y1} L ${x2} ${y2}`;
+
+  // Sideways or upward edges (the re-plan cycle) route around the graph.
+  if (y2 <= y1) {
+    const mid = Math.max(y1, a.y + a.h / 2) + 34;
+    return `M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${b.y + b.h / 2}`;
+  }
+  const cy = (y1 + y2) / 2;
+  return `M ${x1} ${y1} C ${x1} ${cy}, ${x2} ${cy}, ${x2} ${y2}`;
+}
+
+function drawGraph() {
+  const svg = document.getElementById('agent-graph');
+  svg.innerHTML = '';
+
+  const defs = el('defs', {}, svg);
+
+  // Two markers so an active edge gets a coloured head, not just a coloured line.
+  [['arrow', 'var(--border-strong)'], ['arrow-active', 'var(--accent)']].forEach(([id, fill]) => {
+    const marker = el('marker', {
+      id, viewBox: '0 0 10 10', refX: '10', refY: '5',
+      markerWidth: '6', markerHeight: '6', orient: 'auto'
+    }, defs);
+    el('path', { d: 'M 0 0 L 10 5 L 0 10 z', fill }, marker);
+  });
+
+  const edgeLayer = el('g', { id: 'edges' }, svg);
+  const nodeLayer = el('g', { id: 'nodes' }, svg);
+
+  EDGES.forEach((edge, i) => {
+    el('path', {
+      d: edgePath(edge.from, edge.to),
+      class: 'gedge',
+      id: `edge-${i}`,
+      'data-kind': edge.kind,
+      'data-from': edge.from,
+      'data-to': edge.to,
+      'marker-end': 'url(#arrow)'
+    }, edgeLayer);
+  });
+
+  for (const [id, n] of Object.entries(NODES)) {
+    const g = el('g', { class: 'gnode', id: `node-${id}`, 'data-state': 'idle' }, nodeLayer);
+    el('rect', {
+      x: n.x - n.w / 2, y: n.y - n.h / 2, width: n.w, height: n.h,
+      rx: 10, class: 'gnode-box'
+    }, g);
+
+    // Status dot in the corner — a second channel beside the fill colour.
+    el('circle', {
+      cx: n.x - n.w / 2 + 11, cy: n.y - n.h / 2 + 11, r: 3, class: 'gnode-dot'
+    }, g);
+
+    const label = el('text', {
+      x: n.x + 6, y: n.y - 2, 'text-anchor': 'middle', class: 'gnode-label'
+    }, g);
+    label.textContent = n.label;
+    const sub = el('text', {
+      x: n.x + 6, y: n.y + 11, 'text-anchor': 'middle', class: 'gnode-sub'
+    }, g);
+    sub.textContent = n.sub;
+
+    // Tool-call count, filled in live.
+    const badge = el('text', {
+      x: n.x + n.w / 2 - 9, y: n.y - n.h / 2 + 15, 'text-anchor': 'end',
+      class: 'gnode-badge', id: `badge-${id}`
+    }, g);
+    badge.textContent = '';
+  }
+}
+
+function setNodeState(id, state) {
+  const node = document.getElementById(`node-${id}`);
+  if (node) node.setAttribute('data-state', state);
+}
+
+function activateEdgesInto(id) {
+  document.querySelectorAll(`.gedge[data-to="${id}"]`).forEach(edge => {
+    edge.setAttribute('data-state', 'active');
+    sendPacket(edge);
+  });
+}
+
+function sendPacket(edge) {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const svg = document.getElementById('agent-graph');
+  const dot = el('circle', { r: 3.2, class: 'gpacket' }, svg);
+  const motion = el('animateMotion', { dur: '0.75s', fill: 'remove', path: edge.getAttribute('d') }, dot);
+  motion.addEventListener('endEvent', () => dot.remove());
+  setTimeout(() => dot.remove(), 900);
+  if (motion.beginElement) motion.beginElement();
+}
+
+function resetGraph() {
+  Object.keys(NODES).forEach(id => setNodeState(id, 'idle'));
+  document.querySelectorAll('.gedge').forEach(e => e.removeAttribute('data-state'));
+  document.querySelectorAll('.gpacket').forEach(p => p.remove());
+}
+
+/* =======================================================================
+   Event log
+   ======================================================================= */
+
+let startedAt = 0, timerHandle = null, nodeCount = 0, toolCount = 0;
+
+function logEvent(kind, html) {
+  const log = document.getElementById('eventlog');
+  if (log.dataset.cleared !== '1') { log.innerHTML = ''; log.dataset.cleared = '1'; }
+  const div = document.createElement('div');
+  div.className = 'event';
+  div.dataset.kind = kind;
+  const elapsed = ((performance.now() - startedAt) / 1000).toFixed(1);
+  div.innerHTML = `<span class="event-time">${elapsed}s</span><span class="event-body">${html}</span>`;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+function startTimer() {
+  startedAt = performance.now();
+  const out = document.getElementById('run-timer');
+  clearInterval(timerHandle);
+  timerHandle = setInterval(() => {
+    out.textContent = ((performance.now() - startedAt) / 1000).toFixed(1) + 's';
+  }, 100);
+}
+function stopTimer() { clearInterval(timerHandle); }
+
+/* =======================================================================
+   Run
+   ======================================================================= */
+
+function setExample(question, role) {
+  document.getElementById('question').value = question;
+  document.getElementById('user_role').value = role;
+}
+
+document.getElementById('ask-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+
+  const question = document.getElementById('question').value.trim();
+  if (!question) return;
+  const role = document.getElementById('user_role').value;
+
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  document.getElementById('run-label').textContent = 'Running…';
+
+  resetGraph();
+  nodeCount = 0; toolCount = 0;
+  document.getElementById('eventlog').dataset.cleared = '0';
+  document.getElementById('answer-section').classList.add('hidden');
+  document.getElementById('verification').classList.add('hidden');
+  document.getElementById('run-stats').classList.remove('hidden');
+  startTimer();
+
+  setNodeState('plan', 'running');
+
+  const body = new URLSearchParams({ question, user_role: role });
+
+  try {
+    const response = await fetch('/api/ask/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body
+    });
+    if (!response.ok || !response.body) throw new Error('HTTP ' + response.status);
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let boundary;
+      while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+        const chunk = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        handleEvent(chunk);
+      }
+    }
+  } catch (err) {
+    logEvent('error', `<b>Stream failed</b> — ${err.message}`);
+  } finally {
+    stopTimer();
+    btn.disabled = false;
+    document.getElementById('run-label').textContent = 'Run';
+  }
+});
+
+function handleEvent(raw) {
+  let eventName = 'message', dataLine = '';
+  raw.split('\n').forEach(line => {
+    if (line.startsWith('event: ')) eventName = line.slice(7).trim();
+    else if (line.startsWith('data: ')) dataLine += line.slice(6);
+  });
+  if (!dataLine) return;
+
+  let payload;
+  try { payload = JSON.parse(dataLine); } catch (e) { return; }
+
+  if (eventName === 'start') {
+    logEvent('node', `<b>Investigation started</b> — run <span class="mono">${payload.run_id.slice(0, 8)}</span>`);
+    document.getElementById('trace-link').href = '/traces/' + payload.run_id;
+    return;
+  }
+
+  if (eventName === 'node') {
+    const id = NODE_ALIASES[payload.node] || payload.node;
+    nodeCount++;
+
+    if (id === 'plan') {
+      // Fan out: mark the selected specialists as running.
+      setNodeState('plan', 'done');
+      const named = (payload.summary || '').split('agents:')[1] || '';
+      SPECIALISTS.forEach(s => { if (named.includes(s)) setNodeState(s, 'running'); });
+    } else {
+      setNodeState(id, 'done');
+      activateEdgesInto(id);
+      if (id === 'synthesize') setNodeState('critic', 'running');
+      if (id === 'critic')     setNodeState('respond', 'running');
+      if (id === 'replan') {
+        SPECIALISTS.forEach(s => {
+          if ((payload.summary || '').includes(s)) setNodeState(s, 'running');
+        });
+      }
+    }
+
+    (payload.spans || []).forEach(span => { toolCount += (span.tool_calls || []).length; });
+    document.getElementById('stat-nodes').textContent = nodeCount;
+    document.getElementById('stat-tools').textContent = toolCount;
+
+    const label = NODES[id] ? NODES[id].label : payload.node;
+    const tools = (payload.spans || []).flatMap(s => s.tool_calls || [])
+      .map(t => `<span class="mono" style="color: var(--accent)">${t.tool}</span>`).join(' ');
+    logEvent(id === 'critic' ? 'critic' : 'node',
+      `<b>${label}</b> — ${payload.summary || ''}${tools ? '<br>' + tools : ''}`);
+    return;
+  }
+
+  if (eventName === 'final') {
+    Object.keys(NODES).forEach(id => {
+      const node = document.getElementById(`node-${id}`);
+      if (node && node.getAttribute('data-state') === 'running') setNodeState(id, 'done');
+    });
+    setNodeState('respond', 'done');
+    document.getElementById('stat-replans').textContent = payload.replan_count || 0;
+    logEvent('final', '<b>Complete</b> — answer verified and composed');
+    renderFinal(payload);
+    return;
+  }
+
+  if (eventName === 'error') {
+    logEvent('error', `<b>Failed</b> — ${payload.message}`);
+    Object.keys(NODES).forEach(id => {
+      const node = document.getElementById(`node-${id}`);
+      if (node && node.getAttribute('data-state') === 'running') setNodeState(id, 'error');
+    });
+  }
+}
+
+function renderFinal(payload) {
+  // --- verification panel ---
+  const critique = payload.critique || {};
+  if (Object.keys(critique).length) {
+    const passed = critique.passed !== false;
+    const section = document.getElementById('verification');
+    section.classList.remove('hidden');
+
+    const icon = document.getElementById('verdict-icon');
+    icon.style.background = passed
+      ? 'color-mix(in srgb, var(--good) 18%, transparent)'
+      : 'color-mix(in srgb, var(--warning) 18%, transparent)';
+    icon.style.color = passed ? 'var(--good)' : 'var(--warning)';
+    icon.innerHTML = passed
+      ? '<svg viewBox="0 0 24 24" class="w-4.5 h-4.5" style="width:18px;height:18px" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m5 13 4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+      : '<svg viewBox="0 0 24 24" style="width:18px;height:18px" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 8v5M12 17h.01M10.3 3.9 2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+    const confidence = typeof critique.confidence === 'number'
+      ? ` · confidence ${(critique.confidence * 100).toFixed(0)}%` : '';
+    document.getElementById('verdict-text').textContent =
+      (passed ? 'Passed verification' : 'Flagged by the critic') + confidence +
+      ` · ${payload.replan_count || 0} re-plan(s)`;
+
+    const detail = document.getElementById('verdict-detail');
+    detail.innerHTML = '';
+    const addList = (title, items, color) => {
+      if (!items || !items.length) return;
+      const wrap = document.createElement('div');
+      wrap.innerHTML = `<div class="eyebrow mb-1" style="color:${color}">${title}</div>` +
+        '<ul class="list-disc ml-4 space-y-0.5">' +
+        items.map(i => `<li>${typeof i === 'string' ? i : (i.claim || i.need || JSON.stringify(i))}</li>`).join('') +
+        '</ul>';
+      detail.appendChild(wrap);
+    };
+    addList('Unsupported claims', critique.unsupported_claims, 'var(--critical)');
+    addList('Contradictions', critique.contradictions, 'var(--serious)');
+    addList('Remaining gaps', critique.gaps, 'var(--warning)');
+    addList('Deterministic failures', critique.deterministic_failures, 'var(--critical)');
+    if (critique.summary) {
+      const p = document.createElement('p');
+      p.className = 't2';
+      p.textContent = critique.summary;
+      detail.appendChild(p);
+    }
+  }
+
+  // --- answer ---
+  const section = document.getElementById('answer-section');
+  section.classList.remove('hidden');
+  const target = document.getElementById('answer');
+  const markdown = payload.answer || '_No answer produced._';
+  target.innerHTML = window.marked ? marked.parse(markdown) : markdown.replace(/\n/g, '<br>');
+
+  // --- citations, each hoverable back to its source passage ---
+  const citations = payload.citations || [];
+  const box = document.getElementById('citations');
+  const list = document.getElementById('citation-list');
+  list.innerHTML = '';
+  if (citations.length) {
+    box.classList.remove('hidden');
+    const seen = new Set();
+    citations.forEach(c => {
+      if (seen.has(c.chunk_id)) return;
+      seen.add(c.chunk_id);
+      const span = document.createElement('span');
+      span.className = 'cite';
+      span.innerHTML =
+        `<button class="cite-btn" type="button"
+                 hx-get="/fragments/citation/${encodeURIComponent(c.chunk_id)}"
+                 hx-target="next .cite-pop" hx-trigger="mouseenter once, focus once">
+           ${c.citation || c.chunk_id}${c.superseded ? ' ⚠' : ''}
+         </button>
+         <span class="cite-pop t3">Loading passage…</span>`;
+      list.appendChild(span);
+    });
+    if (window.htmx) htmx.process(list);
+  } else {
+    box.classList.add('hidden');
+  }
+
+  section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+drawGraph();
+document.addEventListener('themechange', () => { /* colours are CSS vars — nothing to redraw */ });
+</script>
+{% endblock %}

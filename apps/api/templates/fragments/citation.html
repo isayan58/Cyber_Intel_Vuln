@@ -1,0 +1,18 @@
+{% if chunk.found %}
+  <div class="flex items-start justify-between gap-3 mb-2">
+    <div class="min-w-0">
+      <div class="text-[11.5px] font-semibold t1">{{ chunk.title }}</div>
+      <div class="text-[10px] t3 mt-0.5">{{ chunk.section_path }}</div>
+    </div>
+    <div class="flex gap-1.5 shrink-0">
+      {% if chunk.policy_version %}<span class="chip !text-[9.5px]">v{{ chunk.policy_version }}</span>{% endif %}
+      {% if chunk.is_superseded %}<span class="chip chip-breach !text-[9.5px]">superseded</span>{% endif %}
+    </div>
+  </div>
+  <div class="whitespace-pre-wrap leading-relaxed">{{ chunk.text }}</div>
+  <div class="mt-2.5 pt-2 mono text-[9.5px] t3" style="border-top: 1px solid var(--grid)">
+    {{ chunk.chunk_id }}{% if chunk.source_url %} · {{ chunk.source_url }}{% endif %}
+  </div>
+{% else %}
+  <p class="t3">Passage <span class="mono">{{ chunk.chunk_id }}</span> is no longer in the index.</p>
+{% endif %}

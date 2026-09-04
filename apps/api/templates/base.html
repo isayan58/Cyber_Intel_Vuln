@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en" class="h-full dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}VulnIntel AI{% endblock %}</title>
+
+  <script>
+    // Applied before first paint so there is never a light flash.
+    (function () {
+      try {
+        var stored = localStorage.getItem('vulnintel-theme');
+        var dark = stored ? stored === 'dark'
+                          : !window.matchMedia('(prefers-color-scheme: light)').matches;
+        document.documentElement.classList.toggle('dark', dark);
+      } catch (e) { /* private mode — keep the dark default */ }
+    })();
+  </script>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/htmx/1.9.12/htmx.min.js"></script>
+  <script>
+    tailwind.config = { darkMode: 'class', corePlugins: { preflight: true } };
+  </script>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+
+<body class="h-full antialiased">
+
+<div class="flex min-h-full">
+
+  <!-- ================= Sidebar ================= -->
+  <aside class="w-[228px] shrink-0 border-r sticky top-0 h-screen flex flex-col"
+         style="border-color: var(--border); background: var(--surface-1);">
+
+    <div class="px-5 pt-6 pb-5">
+      <div class="flex items-center gap-3">
+        <div class="relative">
+          <svg viewBox="0 0 32 32" class="w-9 h-9" fill="none">
+            <defs>
+              <linearGradient id="shieldGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%"   stop-color="var(--accent)"/>
+                <stop offset="100%" stop-color="var(--series-3)"/>
+              </linearGradient>
+            </defs>
+            <path d="M16 3 5 7.5v8.2C5 22.6 9.6 28.5 16 30c6.4-1.5 11-7.4 11-14.3V7.5L16 3Z"
+                  fill="url(#shieldGrad)" fill-opacity=".18"
+                  stroke="url(#shieldGrad)" stroke-width="1.5"/>
+            <path d="m11.5 16 3.2 3.2L21 12.5" stroke="url(#shieldGrad)"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="absolute -inset-1 rounded-full blur-lg -z-10"
+                style="background: var(--glow); opacity:.5"></span>
+        </div>
+        <div class="min-w-0">
+          <div class="font-semibold text-[13.5px] leading-tight gradient-text">VulnIntel AI</div>
+          <div class="text-[9.5px] t3 mono">v{{ app_version() }} · {{ llm_provider() }}</div>
+        </div>
+      </div>
+    </div>
+
+    <nav class="flex-1 px-3 space-y-1">
+      {% set nav = [
+        ('dashboard','/','Dashboard','M3 12h4l3 8 4-16 3 8h4'),
+        ('ask','/ask','Investigate','M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14ZM20 20l-4.2-4.2'),
+        ('findings','/findings','Findings','M4 6h16M4 12h16M4 18h10'),
+        ('knowledge','/knowledge','Knowledge','M4 5.5A2.5 2.5 0 0 1 6.5 3H19v16H6.5A2.5 2.5 0 0 0 4 21.5V5.5Z'),
+        ('traces','/traces','Traces','M4 18V6M4 18h16M8 15l3.5-4.5L15 13l4-6'),
+        ('system','/system','System','M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7ZM19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7.1 19.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 13.9H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 7.1l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 2.7-1.1V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1.3Z')
+      ] %}
+      {% for key, href, label, icon in nav %}
+      <a href="{{ href }}" class="navlink {% if page == key %}active{% endif %}">
+        <svg viewBox="0 0 24 24" class="w-[15px] h-[15px] shrink-0" fill="none"
+             stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="{{ icon }}"/>
+        </svg>
+        <span>{{ label }}</span>
+      </a>
+      {% endfor %}
+    </nav>
+
+    <div class="px-4 py-4 space-y-3" style="border-top: 1px solid var(--border);">
+      <button onclick="toggleTheme()" class="btn w-full !py-1.5 !text-[11px]">
+        <svg viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>
+        </svg>
+        <span id="theme-label">Light mode</span>
+      </button>
+      <p class="text-[9.5px] leading-relaxed t3">
+        Synthetic inventory · public vulnerability intelligence · defensive use only.
+        Risk scores are a project-specific model, not an industry standard.
+      </p>
+    </div>
+  </aside>
+
+  <!-- ================= Main ================= -->
+  <main class="flex-1 min-w-0">
+    <header class="px-8 py-5 sticky top-0 z-30 card-glass !rounded-none !border-x-0 !border-t-0">
+      <div class="flex items-start justify-between gap-6 flex-wrap">
+        <div class="min-w-0">
+          <div class="eyebrow mb-1">{% block eyebrow %}VulnIntel{% endblock %}</div>
+          <h1 class="text-[19px] font-semibold tracking-tight">{% block heading %}{% endblock %}</h1>
+          <p class="text-[12px] t2 mt-1 max-w-3xl">{% block subheading %}{% endblock %}</p>
+        </div>
+        <div>{% block headeraside %}{% endblock %}</div>
+      </div>
+    </header>
+
+    <div class="px-8 py-6 space-y-6">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+</div>
+
+<script>
+  function syncThemeLabel() {
+    var dark = document.documentElement.classList.contains('dark');
+    var el = document.getElementById('theme-label');
+    if (el) el.textContent = dark ? 'Light mode' : 'Dark mode';
+  }
+  function toggleTheme() {
+    var dark = document.documentElement.classList.toggle('dark');
+    try { localStorage.setItem('vulnintel-theme', dark ? 'dark' : 'light'); } catch (e) {}
+    syncThemeLabel();
+    document.dispatchEvent(new CustomEvent('themechange'));
+  }
+  syncThemeLabel();
+
+  // Count-up for hero numbers.
+  function countUp(el) {
+    var target = parseFloat(el.dataset.count || '0');
+    var decimals = parseInt(el.dataset.decimals || '0', 10);
+    if (!isFinite(target)) { el.textContent = '—'; return; }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      el.textContent = target.toLocaleString(undefined, {minimumFractionDigits: decimals, maximumFractionDigits: decimals});
+      return;
+    }
+    var start = performance.now(), dur = 850;
+    function frame(now) {
+      var p = Math.min((now - start) / dur, 1);
+      var eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = (target * eased).toLocaleString(undefined,
+        {minimumFractionDigits: decimals, maximumFractionDigits: decimals});
+      if (p < 1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+  function initCounters(root) {
+    (root || document).querySelectorAll('[data-count]:not([data-counted])').forEach(function (el) {
+      el.setAttribute('data-counted', '1');
+      countUp(el);
+    });
+  }
+  function initBars(root) {
+    (root || document).querySelectorAll('[data-width]:not([data-widened])').forEach(function (el) {
+      el.setAttribute('data-widened', '1');
+      requestAnimationFrame(function () { el.style.width = el.dataset.width; });
+    });
+  }
+  document.addEventListener('DOMContentLoaded', function () { initCounters(); initBars(); });
+  document.body.addEventListener('htmx:afterSwap', function (e) { initCounters(e.target); initBars(e.target); });
+</script>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

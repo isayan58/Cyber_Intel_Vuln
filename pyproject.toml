@@ -1,0 +1,57 @@
+[project]
+name = "vulnintel-ai"
+version = "0.1.0"
+description = "Enterprise vulnerability and cyber-risk intelligence platform"
+requires-python = ">=3.12"
+dependencies = [
+    "duckdb>=1.1",
+    "pyarrow>=17",
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.5",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
+    "httpx>=0.27",
+    "pyyaml>=6.0",
+    "Faker>=30",
+    "packaging>=24",
+    "python-dateutil>=2.9",
+    "anthropic",
+    "mcp>=1.2",
+    "langgraph>=0.2",
+    "langchain-core>=0.3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6"]
+postgres = ["psycopg[binary]>=3.2"]
+embeddings = ["sentence-transformers>=3.0"]
+
+[project.scripts]
+vulnintel = "vulnintel.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+vulnintel = ["data/*.sql"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+filterwarnings = ["ignore::DeprecationWarning"]

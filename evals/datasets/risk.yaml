@@ -1,0 +1,124 @@
+# Deterministic risk-model cases.
+#
+# These are the design doc's §14.1 requirements made executable:
+#   * "not affected" cases, to catch over-alerting
+#   * high CVSS with low enterprise relevance, which must NOT rank first
+#   * lower CVSS with KEV + internet exposure, which MUST outrank it
+#
+# Everything here runs with no model and no network.
+
+scoring_cases:
+  - id: kev-internet-tier1
+    description: KEV-listed, internet-facing, Tier-1 production, restricted data
+    inputs:
+      cvss_base: 9.8
+      epss: 0.91
+      kev: true
+      business_criticality: critical
+      environment: production
+      internet_facing: true
+      data_classification: restricted
+    expect_score_between: [90, 100]
+    expect_band: P1
+    expect_sla_days: 3
+    expect_sla_rule: SLA-1
+
+  - id: kev-internal
+    description: KEV-listed but internal only
+    inputs:
+      cvss_base: 8.1
+      epss: 0.42
+      kev: true
+      business_criticality: high
+      environment: production
+      internet_facing: false
+      data_classification: confidential
+    expect_sla_days: 7
+    expect_sla_rule: SLA-2
+
+  - id: high-cvss-low-relevance
+    description: >
+      CVSS 9.8 on a low-value development box. Technical severity is maximal
+      but enterprise relevance is not, so this must not outrank the KEV cases.
+    inputs:
+      cvss_base: 9.8
+      epss: 0.02
+      kev: false
+      business_criticality: low
+      environment: development
+      internet_facing: false
+      data_classification: public
+    expect_score_between: [20, 45]
+    expect_band: [P3, P4]
+
+  - id: low-cvss-kev-exposed
+    description: >
+      CVSS 6.5 — merely "medium" — but known-exploited on an internet-facing
+      Tier-1 asset. This is the case a CVSS-ordered queue gets wrong.
+    inputs:
+      cvss_base: 6.5
+      epss: 0.55
+      kev: true
+      business_criticality: critical
+      environment: production
+      internet_facing: true
+      data_classification: restricted
+    expect_score_between: [70, 95]
+    expect_band: [P1, P2]
+    must_outrank: high-cvss-low-relevance
+
+  - id: no-cvss-available
+    description: No CVSS published yet — a neutral prior, never a zero
+    inputs:
+      cvss_base: null
+      epss: null
+      kev: false
+      business_criticality: medium
+      environment: production
+      internet_facing: false
+      data_classification: internal
+    expect_note_contains: "CVSS unavailable"
+
+  - id: compensating-control
+    description: A recorded compensating control reduces urgency but not severity
+    inputs:
+      cvss_base: 8.8
+      epss: 0.20
+      kev: false
+      business_criticality: high
+      environment: production
+      internet_facing: true
+      data_classification: confidential
+      has_compensating_control: true
+    expect_note_contains: "compensating control"
+
+  - id: stale-asset
+    description: An asset unpatched for over 180 days gains urgency
+    inputs:
+      cvss_base: 7.5
+      epss: 0.08
+      kev: false
+      business_criticality: high
+      environment: production
+      internet_facing: false
+      data_classification: internal
+      last_patch_days_ago: 400
+    expect_note_contains: "unpatched"
+
+# Version comparison — the function the LLM is forbidden from performing.
+version_cases:
+  - {id: pypi-below-fix,   ecosystem: PyPI, version: "4.2.3",  introduced: "0", fixed: "4.2.11", expect: affected}
+  - {id: pypi-at-fix,      ecosystem: PyPI, version: "4.2.11", introduced: "0", fixed: "4.2.11", expect: not_affected}
+  - {id: pypi-above-fix,   ecosystem: PyPI, version: "5.0.2",  introduced: "0", fixed: "4.2.11", expect: not_affected}
+  - {id: pypi-below-intro, ecosystem: PyPI, version: "3.2.0",  introduced: "4.0.0", fixed: "4.2.11", expect: not_affected}
+  - {id: npm-prerelease,   ecosystem: npm,  version: "1.6.0-beta.1", introduced: "0", fixed: "1.6.0", expect: affected}
+  - {id: npm-release,      ecosystem: npm,  version: "1.6.0", introduced: "0", fixed: "1.6.0", expect: not_affected}
+  - {id: unparseable,      ecosystem: PyPI, version: "latest", introduced: "0", fixed: "4.2.11", expect: unknown}
+  - {id: empty-version,    ecosystem: npm,  version: "*", introduced: "0", fixed: "1.6.0", expect: unknown}
+
+cpe_cases:
+  - {id: within-range,   version: "1.24.0", end_excluding: "1.26.1", expect: affected}
+  - {id: at-upper-bound, version: "1.26.1", end_excluding: "1.26.1", expect: not_affected}
+  - {id: below-lower,    version: "1.18.0", start_including: "1.22.0", end_excluding: "1.26.1", expect: not_affected}
+  - {id: inclusive-end,  version: "2.4.59", end_including: "2.4.59", expect: affected}
+  - {id: wildcard-only,  version: "9.6p1",  expect: unknown}
