@@ -513,3 +513,120 @@ body > * { position: relative; z-index: 1; }
     transition-duration: .001ms !important;
   }
 }
+
+/* ==========================================================================
+   Interactive chart layer
+   ========================================================================== */
+
+/* --- tooltip ------------------------------------------------------------ */
+
+.viz-tip {
+  position: fixed; z-index: 200; pointer-events: none;
+  max-width: 22rem; padding: 9px 12px; border-radius: 9px;
+  background: var(--surface-1); border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  font-size: 11.5px; line-height: 1.5; color: var(--text-2);
+  animation: tipin .12s ease-out;
+}
+.viz-tip b { color: var(--text-1); font-weight: 600; }
+@keyframes tipin { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; } }
+
+[data-tip] { cursor: help; outline: none; }
+[data-tip]:focus-visible { box-shadow: 0 0 0 2px var(--accent); border-radius: 5px; }
+
+.viz-dim { opacity: .22 !important; transition: opacity .18s; }
+
+/* --- tone tokens -------------------------------------------------------- */
+
+.tone-accent   { color: var(--accent); }
+.tone-critical { color: var(--critical); }
+.tone-serious  { color: var(--serious); }
+.tone-warning  { color: var(--warning); }
+.tone-good     { color: var(--good); }
+
+.tone-border-accent   { border-left: 3px solid var(--accent); }
+.tone-border-critical { border-left: 3px solid var(--critical); }
+.tone-border-serious  { border-left: 3px solid var(--serious); }
+.tone-border-warning  { border-left: 3px solid var(--warning); }
+.tone-border-good     { border-left: 3px solid var(--good); }
+
+.decision-tile { transition: transform .2s cubic-bezier(.2,.7,.3,1), box-shadow .2s; }
+.decision-tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+
+/* --- hero --------------------------------------------------------------- */
+
+.hero-glow {
+  position: absolute; inset: -40% -20% auto auto; width: 260px; height: 260px;
+  border-radius: 50%; filter: blur(64px); opacity: .17; pointer-events: none;
+}
+.hero-glow-accent   { background: var(--accent); }
+.hero-glow-critical { background: var(--critical); }
+.hero-glow-serious  { background: var(--serious); }
+.hero-glow-warning  { background: var(--warning); }
+.hero-glow-good     { background: var(--good); }
+
+/* --- bars --------------------------------------------------------------- */
+
+.bar-track {
+  height: 9px; border-radius: 5px; background: var(--grid); overflow: hidden;
+}
+.bar-fill {
+  height: 100%; width: 0; border-radius: 5px;
+  transition: width .95s cubic-bezier(.2,.75,.3,1), filter .18s;
+}
+.bar-row { cursor: help; }
+.bar-row:hover .bar-fill { filter: brightness(1.18) saturate(1.1); }
+
+/* --- donut -------------------------------------------------------------- */
+
+.donut-arc {
+  transition: stroke-dasharray 1s cubic-bezier(.2,.75,.3,1), opacity .18s, filter .18s;
+  cursor: help;
+}
+.donut-arc:hover { filter: brightness(1.2) drop-shadow(0 0 7px currentColor); }
+.legend-row { cursor: help; padding: 2px 0; transition: opacity .18s; }
+
+/* --- histogram ---------------------------------------------------------- */
+
+.histo-col { cursor: help; }
+.histo-bar {
+  width: 100%; border-radius: 4px 4px 2px 2px; min-height: 3px;
+  transition: filter .18s, transform .18s;
+  transform-origin: bottom;
+}
+.histo-col:hover .histo-bar { filter: brightness(1.2); transform: scaleY(1.03); }
+
+/* --- rank movement chart ------------------------------------------------ */
+
+.vp-col  { fill: var(--text-3); font-size: 9.5px; font-weight: 600;
+           letter-spacing: .07em; text-transform: uppercase; }
+.vp-chip { fill: var(--surface-2); stroke: var(--border); stroke-width: 1; }
+.vp-chip-final { fill: var(--surface-3); }
+.vp-text { fill: var(--text-1); font-size: 10.5px; font-weight: 500; }
+.vp-text-dim { fill: var(--text-3); font-size: 9.5px;
+               font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.vp-move { font-size: 11px; font-weight: 700; }
+.vp-row { cursor: help; }
+.vp-row:hover .vp-chip { fill: var(--accent-soft); stroke: var(--accent); }
+.vp-row:hover line { stroke-width: 3.2; }
+
+/* --- run cost breakdown ------------------------------------------------- */
+
+.costbar { display: flex; height: 30px; border-radius: 7px; overflow: hidden; gap: 2px; }
+.costbar > div {
+  transition: filter .18s; cursor: help; min-width: 3px;
+  display: flex; align-items: center; justify-content: center;
+}
+.costbar > div:hover { filter: brightness(1.25); }
+.costbar span { font-size: 9px; font-weight: 600; color: #fff; opacity: .92; }
+
+/* --- inline status dots -------------------------------------------------- */
+.dot-critical, .dot-serious, .dot-warning, .dot-good, .dot-accent {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 6px;
+  box-shadow: 0 0 8px currentColor;
+}
+.dot-critical { background: var(--critical); color: var(--critical); }
+.dot-serious  { background: var(--serious);  color: var(--serious); }
+.dot-warning  { background: var(--warning);  color: var(--warning); }
+.dot-good     { background: var(--good);     color: var(--good); }
+.dot-accent   { background: var(--accent);   color: var(--accent); }

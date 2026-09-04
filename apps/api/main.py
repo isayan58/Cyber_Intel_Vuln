@@ -101,9 +101,11 @@ templates.env.globals["llm_provider"] = lambda: get_settings().llm_provider
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
+    from datetime import UTC, datetime
+
     summary = risk_tools.portfolio_summary()
     inventory = assets_tools.get_inventory_summary()
-    top = risk_tools.rank_findings(limit=8, group_by_cve=True)
+    top = risk_tools.rank_findings(limit=5, group_by_cve=True)
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -111,8 +113,11 @@ def dashboard(request: Request):
             "page": "dashboard",
             "summary": summary,
             "inventory": inventory,
+            "posture": risk_tools.executive_posture(),
+            "proof": risk_tools.value_proof(limit=8),
             "top_risks": top["findings"],
             "freshness": intel_tools.get_feed_freshness(),
+            "today": datetime.now(UTC).strftime("%d %B %Y"),
         },
     )
 
@@ -488,6 +493,12 @@ def api_findings(
 @app.get("/api/findings/{finding_id}/score")
 def api_score(finding_id: int):
     return risk_tools.explain_score(finding_id)
+
+
+@app.get("/api/posture")
+def api_posture():
+    """Executive framing: what needs a decision, and what it puts at risk."""
+    return {"posture": risk_tools.executive_posture(), "proof": risk_tools.value_proof()}
 
 
 @app.get("/api/patch-queue")
