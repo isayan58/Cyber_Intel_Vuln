@@ -124,12 +124,14 @@ class RunTracer:
                     "completed_at": _now(),
                     "latency_ms": span.get("latency_ms"),
                     "status": span.get("status", "ok"),
-                    "input_tokens": None,
-                    "output_tokens": None,
+                    "input_tokens": span.get("input_tokens"),
+                    "output_tokens": span.get("output_tokens"),
                     "detail": json.dumps(
                         {
                             "tool_calls": span.get("tool_calls", []),
                             "prompt_version": span.get("prompt_version"),
+                            "tier": span.get("tier"),
+                            "cache_read_tokens": span.get("cache_read_tokens"),
                         },
                         default=str,
                     ),

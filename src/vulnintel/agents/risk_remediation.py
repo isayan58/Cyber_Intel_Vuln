@@ -127,6 +127,11 @@ class RiskRemediationAgent(Agent):
         result = super().run(state)
         result.prompt_version = getattr(self, "_last_prompt_version", None)
         result.usage = getattr(self, "_last_usage", {})
+        result.span.update({
+            "input_tokens": result.usage.get("input_tokens"),
+            "output_tokens": result.usage.get("output_tokens"),
+            "tier": result.usage.get("tier"),
+        })
         return result
 
 
