@@ -40,7 +40,12 @@ class Settings(BaseSettings):
     # Two tiers. Extraction and summarisation do not need frontier reasoning
     # and run 5x cheaper on Haiku; planning, synthesis and verification stay on
     # Opus. Each prompt declares its tier in its YAML.
+    # Three tiers, chosen from measured per-node cost. Extraction and
+    # presentation run on Haiku; structured synthesis over already-computed
+    # numbers runs on Sonnet; only verification stays on Opus, and only when a
+    # deterministic check has flagged something worth its judgement.
     llm_model: str = "claude-opus-5"
+    llm_model_mid: str = "claude-sonnet-5"
     llm_model_fast: str = "claude-haiku-4-5-20251001"
     llm_tiering_enabled: bool = True
     llm_effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"

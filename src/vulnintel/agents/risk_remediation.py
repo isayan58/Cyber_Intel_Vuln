@@ -87,12 +87,12 @@ class RiskRemediationAgent(Agent):
                     "score_explanations": gathered.get("score_explanations"),
                     "portfolio": gathered.get("portfolio"),
                 },
-                limit=26000,
+                limit=14000,
             ),
             asset_context=as_json(
                 (evidence.get("asset_exposure") or {}).get("interpretation")
                 or (evidence.get("asset_exposure") or {}).get("aggregates"),
-                limit=6000,
+                limit=3500,
             ),
             vulnerability_context=as_json(
                 (evidence.get("vulnerability_intel") or {}).get("interpretation"), limit=6000
@@ -100,7 +100,7 @@ class RiskRemediationAgent(Agent):
             threat_context=as_json(
                 (evidence.get("threat_intel") or {}).get("interpretation")
                 or (evidence.get("threat_intel") or {}).get("signals_summary"),
-                limit=6000,
+                limit=3500,
             ),
             policy_context=as_json(
                 {
@@ -110,7 +110,7 @@ class RiskRemediationAgent(Agent):
                     "sla_rules": (evidence.get("policy_rag") or {}).get("sla_rules"),
                     "conflicts": (evidence.get("policy_rag") or {}).get("conflicts"),
                 },
-                limit=8000,
+                limit=5000,
             ),
         )
 

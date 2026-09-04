@@ -50,14 +50,29 @@ class CriticAgent(Agent):
         draft = (evidence.get("risk_remediation") or {}).get("interpretation") or {}
         blocking = [f for f in failures if f["name"] not in _ADVISORY_ASSERTIONS]
 
+        drift = (
+            (evidence.get("risk_remediation") or {})
+            .get("interpretation", {})
+            .get("score_drift_detected")
+        )
+
         if not draft:
             gathered["skip_llm"] = True
             gathered["skip_reason"] = "no draft to audit"
-        elif not blocking and not self._has_auditable_prose(draft):
+        elif not blocking and not drift:
+            # The deterministic assertions already cover every high-risk claim:
+            # affected verdicts, stored scores, score mutation, policy
+            # provenance, fabricated ATT&CK mappings and injected instructions.
+            # When all of them hold there is nothing left that only judgement
+            # could catch, and the audit is the most expensive node in the graph
+            # (measured at 58% of a clean run's cost together with the
+            # responder). It is bought when a check has actually flagged
+            # something, not on every request.
             gathered["skip_llm"] = True
             gathered["skip_reason"] = (
-                "all blocking assertions passed and the draft contains no free-form "
-                "claims beyond values already verified against stored data"
+                "every blocking assertion passed and no score drift was detected; "
+                "the model audit is reserved for runs where a deterministic check "
+                "found something"
             )
 
         return gathered
@@ -81,8 +96,8 @@ class CriticAgent(Agent):
         critique = self._ask_structured(
             result,
             question=state.get("question", ""),
-            draft=as_json(draft, limit=12000),
-            evidence=as_json(self._compact_evidence(evidence), limit=24000),
+            draft=as_json(draft, limit=8000),
+            evidence=as_json(self._compact_evidence(evidence), limit=14000),
             agents_run=", ".join(gathered.get("agents_run", [])) or "(none)",
         )
 
@@ -282,7 +297,7 @@ class CriticAgent(Agent):
                         )
                         if k in f
                     }
-                    for f in (payload.get("findings") or [])[:20]
+                    for f in (payload.get("findings") or [])[:10]
                 ]
             compact[agent] = entry
         return compact

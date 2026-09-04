@@ -174,11 +174,12 @@ class AnthropicProvider(LLMProvider):
             else system
         )
 
-        model = (
-            settings.llm_model_fast
-            if tier == "fast" and settings.llm_tiering_enabled
-            else self.model
-        )
+        model = self.model
+        if settings.llm_tiering_enabled:
+            model = {
+                "fast": settings.llm_model_fast,
+                "mid": settings.llm_model_mid,
+            }.get(tier, self.model)
 
         kwargs: dict[str, Any] = {
             "model": model,

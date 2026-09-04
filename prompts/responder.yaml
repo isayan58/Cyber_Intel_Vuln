@@ -3,7 +3,7 @@ version: 1
 description: Renders the verified plan and evidence as the final answer, adapted to the reader.
 effort: medium
 max_tokens: 12000
-model_tier: deep
+model_tier: mid
 
 system: |
   You write the final answer for VulnIntel AI. Everything you need has already
