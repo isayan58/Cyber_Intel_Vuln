@@ -250,7 +250,11 @@ def build() -> Path:
            ["5.2", "Grouped scores made explainable", "yes", "yes", "PRIMARY", "—"],
            ["5.3", "Degraded runs declare themselves", "—", "—", "PRIMARY", "yes"],
            ["6.1", "Request shape follows the model", "yes", "—", "yes", "PRIMARY"],
-           ["6.2", "Truncation reports itself", "—", "—", "—", "PRIMARY"]],
+           ["6.2", "Truncation reports itself", "—", "—", "—", "PRIMARY"],
+           ["3.5", "Sonnet mid tier for synthesis", "PRIMARY", "yes", "—", "—"],
+           ["3.6", "Responder moved to fast tier", "PRIMARY", "yes", "watch", "—"],
+           ["3.7", "Evidence payloads trimmed", "PRIMARY", "yes", "watch", "—"],
+           ["4.3", "Critic gated on deterministic outcome", "PRIMARY", "PRIMARY", "watch", "—"]],
           [0.45, 2.5, 0.8, 0.8, 0.85, 0.9])
     para(doc,
          "Note rows 5.1 and 5.2: the accuracy fixes are also among the largest cost and "
@@ -299,7 +303,7 @@ def build() -> Path:
         "run on Claude Haiku 4.5 ($1/$5). risk_remediation, critic and responder stay on "
         "Opus, where judgement is the product. Each prompt declares model_tier: fast | "
         "deep in its YAML; the scheme is disabled wholesale with one environment variable.",
-        f"Moved {OPT['fast_in']:,} input and {OPT['fast_out']:,} output tokens to a model "
+        f"Moved {P1['fast_in']:,} input and {P1['fast_out']:,} output tokens to a model "
         f"5x cheaper on both. Measured saving $0.134 per run — 48% of the total reduction.",
     )
     change_block(
@@ -322,7 +326,7 @@ def build() -> Path:
         "System blocks now carry cache_control with ttl: 1h. Per-agent system prompts are "
         "byte-stable, so consecutive investigations within the hour read the prefix "
         "instead of paying full price for it.",
-        f"{OPT['cache_read']:,} tokens read at ~0.1x. Measured saving $0.016 per run — "
+        f"{P1['cache_read']:,} tokens read at ~0.1x. Measured saving $0.016 per run — "
         f"small, but it scales with how often the system is actually used.",
     )
 
@@ -342,6 +346,45 @@ def build() -> Path:
          "The $0.009 residual is noise between two runs that are comparable but not "
          "identical — the same question yields slightly different evidence volumes.",
          size=9.5, italic=True, colour=MUTED)
+
+    doc.add_heading("3.5 Phase two: attacking the three deep nodes", level=2)
+    para(doc,
+         "Per-node accounting showed three Opus nodes carrying 93% of a clean run's cost "
+         "while the five Haiku agents accounted for 7%. Phase two targeted those three "
+         "directly.")
+    table(doc,
+          ["Node", "Share of clean run", "Change", "New tier"],
+          [["risk_remediation", "35% ($0.180)", "Structured synthesis over already-computed "
+            "numbers does not need frontier reasoning", "Sonnet 5 ($2/$10)"],
+           ["critic", "part of 58%", "Gated on deterministic outcome (see 4.3)",
+            "Opus, on demand"],
+           ["responder", "part of 58%", "Presentation over a verified plan",
+            "Haiku 4.5 ($1/$5)"],
+           ["all payloads", "36k deep input", "Trimmed: risk 26k->14k, critic 24k->14k, "
+            "responder 20k->12k characters", "unchanged"]],
+          [1.5, 1.3, 3.1, 1.15])
+
+    change_block(
+        doc, "3.6", "Responder moved to the fast tier",
+        "The responder writes the final prose over a plan that has already been built and "
+        "verified. It was on Opus purely because everything was.",
+        "Moved to Haiku 4.5. Every number it prints still comes from the stored plan; the "
+        "prompt forbids it from computing anything.",
+        "Measured at $0.014 for the final answer. Factual accuracy held on inspection - "
+        "scores, asset counts, fixed versions and SLA windows were all correct - but two "
+        "stylistic slips appeared: an internal policy described as legally binding, and a "
+        "deadline one day out described as already due. This is the one change with a real "
+        "quality cost; reverting it is a one-line tier change.",
+    )
+    change_block(
+        doc, "3.7", "Evidence payloads trimmed",
+        "36,277 deep-tier input tokens were being spent to produce a five-row answer. The "
+        "critic alone received 24k characters of evidence plus a 12k draft.",
+        "Serialisation limits reduced across risk_remediation, critic and responder, and "
+        "the critic's finding sample cut from 20 rows to 10.",
+        "Input is the cheaper half of the bill, so this is a secondary saving - but it also "
+        "reduces the chance of a model losing the thread in a long payload.",
+    )
 
     # ===== 4. performance =====
     doc.add_heading("4. Performance optimisations", level=1)
@@ -376,6 +419,22 @@ def build() -> Path:
          "retrieval rather than generation — a useful correction to the intuition that a "
          "faster model always means a faster node.",
          size=9.5, italic=True, colour=MUTED)
+
+    change_block(
+        doc, "4.3", "Critic gated on deterministic outcome",
+        "The gate added in 4.1 required the draft to contain under 400 characters of prose, "
+        "which never happens for a real answer - so in practice it never fired and the "
+        "critic ran on every request at roughly a third of total cost.",
+        "The gate now turns on the deterministic result instead: the model audit is skipped "
+        "when every blocking assertion passed and no score drift was detected. Those "
+        "assertions already cover affected verdicts, stored scores, score mutation, policy "
+        "provenance, fabricated ATT&CK mappings and injected instructions.",
+        "The largest single saving in phase two. On the verification run the critic cost "
+        "$0.00 and 0 ms while still returning a valid verdict marked deterministic_only. "
+        "The Opus audit remains available for exactly the runs that need it - and it is "
+        "worth noting that this node is what caught the version-comparison bug, the count "
+        "contradiction and the unverifiable scores.",
+    )
 
     # ===== 5. accuracy =====
     doc.add_heading("5. Accuracy optimisations", level=1)
@@ -446,41 +505,80 @@ def build() -> Path:
 
     # ===== 7. net effect =====
     doc.add_heading("7. Net measured effect", level=1)
+    para(doc, "Three measured points, each a live investigation against the same question.")
     table(doc,
-          ["Metric", "Baseline", "Optimised", "Change"],
-          [["Wall clock", f"{BASE['latency_s']}s", f"{OPT['latency_s']}s", "-21%"],
-           ["Cost per investigation", f"${BASE['cost']:.3f}", f"${OPT['cost']:.3f}", "-35%"],
-           ["Opus input tokens", f"{BASE['in']:,}", f"{OPT['deep_in']:,}", "-37%"],
-           ["Opus output tokens", f"{BASE['out']:,}", f"{OPT['deep_out']:,}", "-40%"],
-           ["Haiku tokens", "0",
-            f"{OPT['fast_in']:,} in / {OPT['fast_out']:,} out", "work moved off Opus"],
-           ["Cache reads", "0-4,662", f"{OPT['cache_read']:,}", "prefix reuse working"],
-           ["Silent agent failures", "0-2 per run", "0", "eliminated"]],
-          [1.7, 1.5, 1.9, 1.5])
-    callout(
-        doc, "Honest reading.",
-        "This is a 35% reduction on a run that still re-planned twice. A clean baseline run "
-        "cost $0.53 in 133 seconds, so eliminating re-plans matters more than any per-token "
-        "saving. Changes 5.1 and 5.2 target exactly that, but were made after this "
-        "measurement — a clean-run verification is the outstanding work. The projection "
-        "below is not a measurement.", "FFF6E8",
-    )
+          ["Stage", "Cost", "Latency", "Configuration"],
+          [["Baseline", f"${BASE['cost']:.3f}", f"{BASE['latency_s']}s",
+            "All Opus, effort high, 2 re-plans"],
+           ["Phase 1", f"${P1['cost']:.3f}", f"{P1['latency_s']}s",
+            "Haiku/Opus tiers, effort medium, 1h cache, 2 re-plans"],
+           ["Phase 1, re-plans off", f"${CLEAN['cost']:.3f}", f"{CLEAN['latency_s']}s",
+            "Same, single cycle - isolates the true cost of re-planning"],
+           ["Phase 2 (final)", f"${OPT['cost']:.4f}", f"{OPT['latency_s']}s",
+            "Sonnet synthesis, gated critic, Haiku responder, trimmed payloads"]],
+          [1.55, 1.0, 1.0, 3.15], emphasise_last=True)
+    para(doc,
+         f"Against the baseline: {(1 - OPT['cost'] / BASE['cost']) * 100:.0f}% less cost "
+         f"and {(1 - OPT['latency_s'] / BASE['latency_s']) * 100:.0f}% less wall clock.",
+         bold=True)
 
-    doc.add_heading("7.1 Projection for the remaining work", level=2)
+    doc.add_heading("7.1 Final per-node cost", level=2)
     table(doc,
-          ["Remaining change", "Cost", "Latency", "Confidence"],
-          [["Re-plans removed (5.1 + 5.2)", "-40 to -50%", "-55 to -65%",
-            "High - a clean baseline run was 133s / $0.53"],
-           ["Critic gate on clean runs (4.1)", "-10 to -15%", "-15 to -25%",
-            "High - node cost measured directly"],
-           ["Projected clean run", "~$0.15-0.25", "~70-110s", "To be verified"]],
-          [2.3, 1.05, 1.05, 2.2], emphasise_last=True)
+          ["Node", "Tier", "Input", "Output", "Cost", "Share"],
+          [[n, t, f"{i:,}", f"{o:,}", f"${c:.4f}",
+            f"{c / OPT['cost'] * 100:.0f}%" if c else "0%"]
+           for n, t, i, o, c in NODES_FINAL]
+          + [["TOTAL", "", "", "", f"${OPT['cost']:.4f}", "100%"]],
+          [1.7, 0.7, 0.95, 0.95, 0.85, 0.7], emphasise_last=True)
+
+    doc.add_heading("7.2 A projection the data disproved", level=2)
+    callout(
+        doc, "Correction.",
+        f"An earlier draft projected that removing both re-plan cycles would cut cost "
+        f"40-50%. It was measured instead: suppressing re-plans took a phase-1 run from "
+        f"${P1['cost']:.3f} to ${CLEAN['cost']:.3f} - a saving of one cent. Re-planning "
+        f"was expensive in latency ({P1['latency_s']}s to {CLEAN['latency_s']}s, -61%) but "
+        f"almost irrelevant to cost, because the extra cycles reused the same cached "
+        f"prefixes and produced short outputs. The real driver was the per-call cost of "
+        f"three Opus nodes, which per-node accounting exposed only once span-level token "
+        f"recording was added. The projection was replaced rather than quietly dropped.",
+        "FFF6E8",
+    )
+    para(doc,
+         "The lesson generalises: the cost model was wrong because the instrumentation was "
+         "too coarse to test it. Per-run totals could not distinguish 'many cheap calls' "
+         "from 'few expensive ones'.",
+         size=9.5, italic=True, colour=MUTED)
+
+    doc.add_heading("7.3 What was traded away", level=2)
+    table(doc,
+          ["Change", "Risk accepted", "How to revert"],
+          [["Critic gated on assertions",
+            "A model audit no longer runs on clean runs, so failures only deterministic "
+            "checks cannot express would go unflagged.",
+            "Remove the gate condition in critic.gather()"],
+           ["Responder on Haiku",
+            "Two stylistic slips observed in the verification run: an internal policy "
+            "called legally binding, and a deadline one day out described as already due. "
+            "All figures were correct.",
+            "model_tier: deep in prompts/responder.yaml"],
+           ["risk_remediation on Sonnet",
+            "Less sophisticated remediation sequencing. None observed on inspection.",
+            "model_tier: deep in prompts/risk_remediation.yaml"],
+           ["Payloads trimmed",
+            "Less evidence breadth reaches the synthesis and audit steps.",
+            "Raise the as_json limits"]],
+          [1.55, 3.3, 1.9])
 
     # ===== 8. backlog =====
     doc.add_heading("8. Backlog, by axis", level=1)
     table(doc,
           ["Axis", "Change", "Why it matters"],
-          [["Accuracy", "Collapse findings to one per (asset, CVE)",
+          [["Cost", "Semantic response cache",
+            "The last large lever. 'Top five issues this week' is asked repeatedly against "
+            "data that changes daily; keyed on a question fingerprint plus a data-version "
+            "key, repeat asks become nearly free."],
+           ["Accuracy", "Collapse findings to one per (asset, CVE)",
             "516,294 findings across 12,000 assets is 43 per asset; one CVE yields several "
             "findings per asset when an advisory has multiple ranges. No analyst would "
             "accept a queue this size. Also shrinks every payload the model reads."],
@@ -493,10 +591,6 @@ def build() -> Path:
            ["Latency", "Stream the responder to the UI",
             "SSE plumbing already exists. First visible token in seconds rather than after "
             "full generation."],
-           ["Cost", "Semantic response cache",
-            "'Top five issues this week' is asked repeatedly against data that changes "
-            "daily. Keyed on question fingerprint plus a data-version key, repeat asks "
-            "become nearly free."],
            ["Accuracy", "Real embeddings instead of the hash provider",
             "The out-of-scope adversarial retrieval case passes at rerank 0.0156 against a "
             "0.012 floor - too close for comfort."],
