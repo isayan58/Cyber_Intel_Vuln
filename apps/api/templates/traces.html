@@ -1,76 +1,93 @@
 {% extends "base.html" %}
 {% import "macros.html" as ui %}
 
-{% block title %}Traces · VulnIntel AI{% endblock %}
-{% block eyebrow %}Observability{% endblock %}
-{% block heading %}Traces{% endblock %}
+{% block title %}Audit · VulnIntel AI{% endblock %}
+{% block eyebrow %}Audit and assurance{% endblock %}
+{% block heading %}Can you trust the answers?{% endblock %}
 {% block subheading %}
-  Runs, node latency and tool usage are persisted to the warehouse rather than only to a hosted
-  tool — so reliability claims about this system are SQL queries, not screenshots.
+  Every question ever asked is recorded here — what was looked up, which step produced what,
+  how long it took and what it cost. Nothing is a black box: you can open any answer and trace
+  every number back to the data it came from.
 {% endblock %}
 
 {% block content %}
 
 <section class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-  {{ ui.stat(replan.runs or 0, 'Successful runs', 'stat-accent') }}
-  {{ ui.stat(replan.runs_with_replan or 0, 'Runs needing a re-plan', 'stat-warning',
-             hint='Critic found an actionable gap') }}
-  {{ ui.stat(replan.avg_replans or 0, 'Average re-plans per run', '', decimals=2) }}
-  {{ ui.stat(replan.avg_latency_ms or 0, 'Average latency (ms)', '') }}
+  {{ ui.decision(replan.runs or 0, 'questions answered',
+     'Each one fully traceable end to end', 'accent') }}
+  {{ ui.decision(replan.avg_latency_ms|default(0) / 1000, 'seconds, typical answer',
+     'From question to verified, cited response', 'good') }}
+  {{ ui.decision(replan.runs_with_replan or 0, 'answers sent back for more evidence',
+     'The system rejected its own first draft and gathered more', 'warning',
+     'A self-check caught something and forced another evidence pass. This is the
+      verification layer working, not a failure.') }}
+  {{ ui.decision(tool_usage|sum(attribute='calls'), 'data lookups audited',
+     'Every query logged with its arguments and result', 'accent') }}
 </section>
 
 <section class="grid grid-cols-1 xl:grid-cols-2 gap-5">
-
   <div class="card card-lit p-5 fade-up">
-    <div class="mb-4">
-      <h2 class="text-[13px] font-semibold">Latency by node</h2>
-      <p class="text-[10.5px] t3 mt-0.5">Mean wall-clock time per graph node, milliseconds</p>
-    </div>
-    {{ ui.hbar(node_latency, 'node', 'avg_latency_ms', 'var(--series-2)', ' ms') }}
+    {{ ui.chart_head('Where the time goes',
+       'Average seconds per step. The gathering steps run in parallel, so the total is far less
+        than the sum.', 'mean per step') }}
+    {{ ui.hbar(node_latency, 'node', 'avg_latency_ms', 'var(--series-2)', ' ms', 9,
+               tip_key='executions') }}
   </div>
 
   <div class="card card-lit p-5 fade-up">
-    <div class="mb-4">
-      <h2 class="text-[13px] font-semibold">Tool call volume</h2>
-      <p class="text-[10.5px] t3 mt-0.5">Every call is audited with its arguments and row count</p>
-    </div>
-    {{ ui.hbar(tool_usage, 'tool_name', 'calls', 'var(--series-3)') }}
+    {{ ui.chart_head('What the system actually looked up',
+       'Every data source call, counted. This is the evidence trail behind the advice — no answer
+        is produced without it.') }}
+    {{ ui.hbar(tool_usage, 'tool_name', 'calls', 'var(--series-3)', '', 9) }}
   </div>
 </section>
 
 <section class="card card-lit fade-up overflow-hidden">
-  <div class="px-5 py-4" style="border-bottom: 1px solid var(--border)">
-    <h2 class="text-[13px] font-semibold">Recent investigations</h2>
+  <div class="px-6 py-5" style="border-bottom: 1px solid var(--border)">
+    {{ ui.chart_head('Every question asked',
+       'Click any row to see the full evidence chain: which sources were consulted, what each step
+        concluded, and whether the self-check passed.') }}
   </div>
   {% if runs %}
   <div class="scroll-x">
     <table class="tbl">
       <thead>
         <tr>
-          <th>Question</th><th>Role</th><th>Mode</th><th>Status</th>
-          <th class="num">Re-plans</th><th class="num">Latency</th><th class="num">Tokens</th><th></th>
+          <th style="min-width:300px">Question</th>
+          <th>Asked by</th>
+          <th>Outcome</th>
+          <th class="num">Evidence passes</th>
+          <th class="num">Time</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
         {% for run in runs %}
         <tr>
-          <td class="max-w-[330px]">
+          <td class="max-w-[340px]">
             <div class="truncate text-[11.5px]" title="{{ run.question }}">{{ run.question }}</div>
-            <div class="mono text-[9.5px] t3">{{ run.run_id[:8] }} · {{ run.started_at.strftime('%d %b %H:%M:%S') if run.started_at else '' }}</div>
+            <div class="mono text-[9.5px] t3">
+              {{ run.started_at.strftime('%d %b %H:%M:%S') if run.started_at else '' }}
+            </div>
           </td>
           <td class="text-[11px] t2">{{ run.user_role }}</td>
-          <td class="text-[11px] t2">{{ run.response_mode or '—' }}</td>
           <td>
-            {% if run.status == 'succeeded' %}<span class="chip chip-ok">✓ ok</span>
-            {% elif run.status == 'running' %}<span class="chip">running</span>
-            {% else %}<span class="chip chip-kev">✗ {{ run.status }}</span>{% endif %}
+            {% if run.status == 'succeeded' %}
+              <span class="chip chip-ok">✓ answered</span>
+            {% elif run.status == 'running' %}
+              <span class="chip">in progress</span>
+            {% else %}
+              <span class="chip chip-kev">✗ failed</span>
+            {% endif %}
           </td>
-          <td class="num tabular-nums">{{ run.replan_count }}</td>
-          <td class="num tabular-nums">{{ run.latency_ms or '—' }}</td>
-          <td class="num tabular-nums t2">
-            {{ (run.total_input_tokens or 0) + (run.total_output_tokens or 0) }}
+          <td class="num tabular-nums"
+              data-tip="{{ (run.replan_count or 0) + 1 }} evidence pass{{ 'es' if run.replan_count else '' }}{% if run.replan_count %} — the self-check asked for more before answering{% endif %}">
+            {{ (run.replan_count or 0) + 1 }}
           </td>
-          <td><a class="btn !py-1 !px-2.5 !text-[10.5px]" href="/traces/{{ run.run_id }}">Trace</a></td>
+          <td class="num tabular-nums">
+            {{ ((run.latency_ms or 0) / 1000)|round(0)|int }}s
+          </td>
+          <td><a class="btn !py-1 !px-2.5 !text-[10.5px]" href="/traces/{{ run.run_id }}">Open</a></td>
         </tr>
         {% endfor %}
       </tbody>
@@ -78,7 +95,7 @@
   </div>
   {% else %}
   <div class="p-8 text-center text-[12px] t3">
-    No investigations recorded yet. <a href="/ask" style="color: var(--accent)">Run one →</a>
+    No questions asked yet. <a href="/ask" style="color: var(--accent)">Ask one →</a>
   </div>
   {% endif %}
 </section>
