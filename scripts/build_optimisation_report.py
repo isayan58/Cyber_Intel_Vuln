@@ -39,8 +39,24 @@ ACC = RGBColor(0x7C, 0x2D, 0x8F)
 
 # Measured, from the two comparable live runs (both took two re-plan cycles).
 BASE = {"latency_s": 537, "cost": 0.7950, "in": 51_887, "out": 21_424}
-OPT = {"latency_s": 427, "cost": 0.5188, "deep_in": 32_514, "deep_out": 12_913,
-       "fast_in": 18_046, "fast_out": 3_078, "cache_read": 3_484}
+# Phase 1: tiering (2 tiers), effort tuning, cache TTL. Still re-planned twice.
+P1 = {"latency_s": 427, "cost": 0.5188, "deep_in": 32_514, "deep_out": 12_913,
+      "fast_in": 18_046, "fast_out": 3_078, "cache_read": 3_484}
+# Phase 1 with re-plans suppressed, to isolate their true cost.
+CLEAN = {"latency_s": 165, "cost": 0.5087}
+# Phase 2: Sonnet mid tier, critic gated on deterministic outcome, payloads
+# trimmed, responder moved to the fast tier.
+OPT = {"latency_s": 87, "cost": 0.0938}
+NODES_FINAL = [
+    ("supervisor", "fast", 1_903, 221, 0.0030),
+    ("asset_exposure", "fast", 9_592, 529, 0.0122),
+    ("policy_rag", "fast", 3_783, 1_208, 0.0098),
+    ("threat_intel", "fast", 3_112, 1_214, 0.0092),
+    ("vulnerability_intel", "-", 0, 0, 0.0),
+    ("risk_remediation", "mid", 9_707, 2_650, 0.0459),
+    ("critic", "gated", 0, 0, 0.0),
+    ("responder", "fast", 5_224, 1_683, 0.0136),
+]
 
 
 def measured() -> dict:
@@ -210,15 +226,14 @@ def build() -> Path:
 
     callout(
         doc, "Headline.",
-        f"Nine changes across four axes. On a like-for-like comparison — both runs took "
-        f"two re-plan cycles — cost fell "
-        f"{(1 - OPT['cost'] / BASE['cost']) * 100:.0f}% (${BASE['cost']:.2f} to "
-        f"${OPT['cost']:.2f}) and wall clock fell "
+        f"Thirteen changes across four axes, applied in two phases against measured "
+        f"baselines. Cost per investigation fell "
+        f"{(1 - OPT['cost'] / BASE['cost']) * 100:.0f}% "
+        f"(${BASE['cost']:.2f} to ${OPT['cost']:.3f}) and wall clock fell "
         f"{(1 - OPT['latency_s'] / BASE['latency_s']) * 100:.0f}% "
-        f"({BASE['latency_s']}s to {OPT['latency_s']}s). Section 3.4 attributes the saving "
-        f"line by line; it reconciles to within $0.01 of the measured delta. Two defects "
-        f"were found by the verification runs themselves, one of which would have made the "
-        f"system worse while appearing to succeed.",
+        f"({BASE['latency_s']}s to {OPT['latency_s']}s), with no loss of factual "
+        f"accuracy. Section 7.2 records a projection that the data disproved — re-plans "
+        f"were not the cost driver — and section 3.5 shows what actually was.",
     )
 
     # ===== 1. matrix =====
