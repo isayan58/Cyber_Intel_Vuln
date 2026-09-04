@@ -2,12 +2,12 @@
 {% import "macros.html" as ui %}
 
 {% block title %}Knowledge · VulnIntel AI{% endblock %}
-{% block eyebrow %}Policy corpus{% endblock %}
-{% block heading %}Knowledge base{% endblock %}
+{% block eyebrow %}Your policies, machine-readable{% endblock %}
+{% block heading %}What your own rules require{% endblock %}
 {% block subheading %}
-  Hybrid retrieval — BM25 and vector candidates fused by reciprocal rank, then reranked.
-  Superseded policy is demoted and flagged rather than deleted, so a version conflict surfaces
-  instead of being averaged away.
+  Advice is grounded in your policies, not the model's general knowledge. Ask a question and
+  see the exact passage it came from. Out-of-date policy is flagged rather than quietly used —
+  if two versions disagree, you are told.
 {% endblock %}
 
 {% block content %}
@@ -51,12 +51,27 @@
         </div>
       </div>
       <pre class="text-[11.5px] t2 whitespace-pre-wrap leading-relaxed font-sans">{{ item.text }}</pre>
-      <div class="flex items-center gap-3 mt-3 pt-2.5 text-[10px] t3 mono"
-           style="border-top: 1px solid var(--grid)">
-        <span>{{ item.chunk_id }}</span>
-        <span>rerank {{ '%.4f'|format(item.rerank_score) if item.rerank_score is not none else '—' }}</span>
-        <span>bm25 rank {{ item.lexical_rank or '—' }}</span>
-        <span>vector rank {{ item.vector_rank or '—' }}</span>
+      <div class="mt-3 pt-3" style="border-top: 1px solid var(--grid)">
+        <div class="flex items-center justify-between gap-4 flex-wrap">
+          <div class="flex items-center gap-4 text-[10px]">
+            <span class="t3">Found by:</span>
+            {% if item.lexical_rank %}
+              <span class="prov-pill" style="--pc: var(--series-1)"
+                    data-tip="Keyword match — ranked #{{ item.lexical_rank }} by exact wording">
+                keyword #{{ item.lexical_rank }}</span>
+            {% endif %}
+            {% if item.vector_rank %}
+              <span class="prov-pill" style="--pc: var(--series-3)"
+                    data-tip="Meaning match — ranked #{{ item.vector_rank }} by semantic similarity">
+                meaning #{{ item.vector_rank }}</span>
+            {% endif %}
+            {% if item.lexical_rank and item.vector_rank %}
+              <span class="t3" data-tip="Both search methods agreed this passage was relevant,
+                    which is the strongest signal hybrid retrieval gives">both agreed</span>
+            {% endif %}
+          </div>
+          <span class="mono text-[9.5px] t3">{{ item.chunk_id }}</span>
+        </div>
       </div>
     </article>
     {% endfor %}
@@ -101,10 +116,9 @@
   <div class="card card-lit fade-up overflow-hidden">
     <div class="px-5 py-4" style="border-bottom: 1px solid var(--border)">
       <h2 class="text-[13px] font-semibold">Remediation SLA rules</h2>
-      <p class="text-[10.5px] t3 mt-0.5">
-        The single source of truth. The scorer reads this table, and the Vulnerability
-        Management Standard is generated from it — so a quoted obligation and a computed
-        deadline cannot drift apart.
+      <p class="text-[11px] t2 mt-1 leading-snug">
+        These are your deadlines, and the system computes against exactly this table — so what
+        the assistant quotes and what the dashboard counts as overdue can never disagree.
       </p>
     </div>
     <div class="scroll-x">

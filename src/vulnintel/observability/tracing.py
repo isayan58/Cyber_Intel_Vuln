@@ -124,12 +124,14 @@ class RunTracer:
                     "completed_at": _now(),
                     "latency_ms": span.get("latency_ms"),
                     "status": span.get("status", "ok"),
-                    "input_tokens": None,
-                    "output_tokens": None,
+                    "input_tokens": span.get("input_tokens"),
+                    "output_tokens": span.get("output_tokens"),
                     "detail": json.dumps(
                         {
                             "tool_calls": span.get("tool_calls", []),
                             "prompt_version": span.get("prompt_version"),
+                            "tier": span.get("tier"),
+                            "cache_read_tokens": span.get("cache_read_tokens"),
                         },
                         default=str,
                     ),
@@ -183,7 +185,8 @@ def node_latency_summary(db: Database | None = None) -> list[dict[str, Any]]:
         "       round(avg(latency_ms), 1) AS avg_latency_ms, "
         "       max(latency_ms) AS max_latency_ms, "
         "       sum(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS errors "
-        "FROM agent_span GROUP BY node ORDER BY avg_latency_ms DESC"
+        "FROM agent_span WHERE node IS NOT NULL AND node <> 'unknown' "
+        "GROUP BY node ORDER BY avg_latency_ms DESC"
     )
 
 

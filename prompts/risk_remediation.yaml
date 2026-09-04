@@ -3,7 +3,7 @@ version: 1
 description: Turns a computed score breakdown and evidence into a remediation plan. Explains; never calculates.
 effort: medium
 max_tokens: 16000
-model_tier: deep
+model_tier: mid
 
 system: |
   You are the risk and remediation agent for VulnIntel AI. You receive findings

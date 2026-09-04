@@ -1,0 +1,57 @@
+{% if cost.nodes %}
+<div class="mt-5 pt-4" style="border-top: 1px solid var(--border)">
+  <div class="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+    <div>
+      <h3 class="text-[12.5px] font-semibold">What this answer cost to produce</h3>
+      <p class="text-[10.5px] t2 mt-0.5">
+        Each step runs on the cheapest model that can do its job. Verification is skipped
+        entirely when the deterministic checks all pass.
+      </p>
+    </div>
+    <div class="text-right">
+      <div class="text-[19px] font-semibold tabular-nums tone-good">
+        ${{ '%.4f'|format(cost.total_cost) }}
+      </div>
+      <div class="text-[9.5px] t3">{{ (cost.total_latency_ms / 1000)|round(0)|int }}s total</div>
+    </div>
+  </div>
+
+  <div class="costbar" data-series-group>
+    {% for n in cost.nodes %}
+      {% if n.cost > 0 %}
+      <div data-series="{{ n.node }}" style="flex: {{ n.cost_share }}; background: {{ n.colour }}"
+           data-tip="<b>{{ n.node }}</b> · {{ n.model }}<br>
+                     {{ '{:,}'.format(n.input_tokens) }} in / {{ '{:,}'.format(n.output_tokens) }} out<br>
+                     ${{ '%.4f'|format(n.cost) }} ({{ n.cost_share }}%) · {{ n.latency_ms }} ms">
+        {% if n.cost_share > 12 %}<span>{{ n.cost_share|round(0)|int }}%</span>{% endif %}
+      </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5 mt-3.5">
+    {% for n in cost.nodes %}
+    <div class="p-2.5 rounded-lg" style="background: var(--surface-2); border: 1px solid var(--border)"
+         data-tip="{{ n.tool_calls }} tool call{{ 's' if n.tool_calls != 1 }} · {{ n.latency_ms }} ms">
+      <div class="flex items-center gap-1.5 mb-1">
+        <span class="w-1.5 h-1.5 rounded-full" style="background: {{ n.colour }}"></span>
+        <span class="text-[10px] font-medium truncate">{{ n.node }}</span>
+      </div>
+      <div class="text-[11px] tabular-nums font-semibold">
+        {% if n.cost %}${{ '%.4f'|format(n.cost) }}{% else %}
+          <span class="tone-good">free</span>{% endif %}
+      </div>
+      <div class="text-[9px] t3">{{ n.model }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if cost.deterministic_nodes %}
+  <p class="text-[10px] t3 mt-3">
+    <b class="tone-good">{{ cost.deterministic_nodes|length }} step{{ 's' if cost.deterministic_nodes|length != 1 }}
+    cost nothing</b> — {{ cost.deterministic_nodes|join(', ') }} ran as plain code with no model call.
+    That is where the scoring, version comparison and verification assertions happen.
+  </p>
+  {% endif %}
+</div>
+{% endif %}

@@ -101,9 +101,11 @@ templates.env.globals["llm_provider"] = lambda: get_settings().llm_provider
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
+    from datetime import UTC, datetime
+
     summary = risk_tools.portfolio_summary()
     inventory = assets_tools.get_inventory_summary()
-    top = risk_tools.rank_findings(limit=8, group_by_cve=True)
+    top = risk_tools.rank_findings(limit=5, group_by_cve=True)
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -111,8 +113,11 @@ def dashboard(request: Request):
             "page": "dashboard",
             "summary": summary,
             "inventory": inventory,
+            "posture": risk_tools.executive_posture(),
+            "proof": risk_tools.value_proof(limit=8),
             "top_risks": top["findings"],
             "freshness": intel_tools.get_feed_freshness(),
+            "today": datetime.now(UTC).strftime("%d %B %Y"),
         },
     )
 
@@ -171,6 +176,8 @@ def findings_page(
         {
             "page": "findings",
             "findings": result["findings"],
+            "summary": risk_tools.portfolio_summary(),
+            "distribution": risk_tools.score_distribution(),
             "filters": {
                 "kev_only": kev_only,
                 "internet_facing_only": internet_facing_only,
@@ -490,6 +497,12 @@ def api_score(finding_id: int):
     return risk_tools.explain_score(finding_id)
 
 
+@app.get("/api/posture")
+def api_posture():
+    """Executive framing: what needs a decision, and what it puts at risk."""
+    return {"posture": risk_tools.executive_posture(), "proof": risk_tools.value_proof()}
+
+
 @app.get("/api/patch-queue")
 def api_patch_queue(capacity: int = Query(20, ge=1, le=200)):
     return risk_tools.patch_queue(capacity=capacity)
@@ -524,6 +537,21 @@ def api_traces(limit: int = Query(25, ge=1, le=200)):
         "tool_usage": tool_usage_summary(),
         "replan": replan_rate(),
     }
+
+
+@app.get("/api/traces/{run_id}/cost")
+def api_run_cost(run_id: str):
+    """Per-node model, tokens, latency and cost for one investigation."""
+    return risk_tools.run_cost_breakdown(run_id)
+
+
+@app.get("/fragments/run-cost/{run_id}", response_class=HTMLResponse)
+def run_cost_fragment(request: Request, run_id: str):
+    return templates.TemplateResponse(
+        request,
+        "fragments/run_cost.html",
+        {"cost": risk_tools.run_cost_breakdown(run_id)},
+    )
 
 
 @app.get("/api/traces/{run_id}")

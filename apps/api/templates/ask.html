@@ -5,9 +5,9 @@
 {% block eyebrow %}Multi-agent investigation{% endblock %}
 {% block heading %}Investigate{% endblock %}
 {% block subheading %}
-  A LangGraph supervisor plans the investigation, fans out to specialist agents in parallel,
-  computes risk deterministically, and a critic verifies every claim before you see it.
-  The graph below lights up as it executes.
+  Ask in plain English. The system plans what evidence it needs, gathers it from several
+  sources at once, calculates the risk with fixed rules, checks its own answer, and shows you
+  every step as it happens — including what it cost.
 {% endblock %}
 
 {% block content %}
@@ -59,9 +59,9 @@
     <div class="px-5 py-3.5 flex items-center justify-between flex-wrap gap-3"
          style="border-bottom: 1px solid var(--border)">
       <div>
-        <h2 class="text-[13px] font-semibold">LangGraph execution</h2>
+        <h2 class="text-[13px] font-semibold">How the answer is being built</h2>
         <p class="text-[10.5px] t3 mt-0.5">
-          Nodes light up as they complete. Unselected nodes never run.
+          Each box is a specialist step. They light up as they finish — steps the question does not need are never run, which is why the cost stays low.
         </p>
       </div>
       <div class="legend">
@@ -80,7 +80,7 @@
   <div class="card card-lit fade-up flex flex-col">
     <div class="px-4 py-3.5 flex items-center justify-between"
          style="border-bottom: 1px solid var(--border)">
-      <h2 class="text-[13px] font-semibold">Event stream</h2>
+      <h2 class="text-[13px] font-semibold">Live progress</h2>
       <span id="run-timer" class="mono text-[11px] t3 tabular-nums">—</span>
     </div>
     <div id="eventlog" class="eventlog flex-1 py-2">
@@ -89,9 +89,9 @@
     <div id="run-stats" class="px-4 py-3 hidden text-[11px]"
          style="border-top: 1px solid var(--border)">
       <div class="grid grid-cols-3 gap-2 text-center">
-        <div><div class="t3 text-[9.5px]">Nodes</div><div id="stat-nodes" class="font-semibold tabular-nums">0</div></div>
-        <div><div class="t3 text-[9.5px]">Tool calls</div><div id="stat-tools" class="font-semibold tabular-nums">0</div></div>
-        <div><div class="t3 text-[9.5px]">Re-plans</div><div id="stat-replans" class="font-semibold tabular-nums">0</div></div>
+        <div><div class="t3 text-[9.5px]">Steps run</div><div id="stat-nodes" class="font-semibold tabular-nums">0</div></div>
+        <div><div class="t3 text-[9.5px]">Data lookups</div><div id="stat-tools" class="font-semibold tabular-nums">0</div></div>
+        <div><div class="t3 text-[9.5px]">Retries</div><div id="stat-replans" class="font-semibold tabular-nums">0</div></div>
       </div>
     </div>
   </div>
@@ -103,7 +103,7 @@
     <div class="flex items-center gap-3 mb-3">
       <div id="verdict-icon" class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"></div>
       <div class="min-w-0">
-        <h2 class="text-[13px] font-semibold">Critic verification</h2>
+        <h2 class="text-[13px] font-semibold">Did the system check its own work?</h2>
         <p id="verdict-text" class="text-[11px] t2 mt-0.5"></p>
       </div>
     </div>
@@ -118,6 +118,7 @@
       <a id="trace-link" href="#" class="btn !py-1.5 !text-[11px]">View full trace →</a>
     </div>
     <div id="answer" class="answer"></div>
+    <div id="run-cost"></div>
     <div id="citations" class="mt-6 pt-4 hidden" style="border-top: 1px solid var(--border)">
       <div class="eyebrow mb-2.5">Sources</div>
       <div id="citation-list" class="flex flex-wrap gap-2"></div>
@@ -135,15 +136,15 @@
    ======================================================================= */
 
 const NODES = {
-  plan:                { x: 450, y: 38,  w: 168, h: 40, label: 'Supervisor / Planner', sub: 'plans + routes' },
-  asset_exposure:      { x: 112, y: 150, w: 158, h: 40, label: 'Asset Exposure',       sub: 'SQL · inventory' },
-  vulnerability_intel: { x: 337, y: 150, w: 158, h: 40, label: 'Vulnerability Intel',  sub: 'NVD · OSV' },
-  threat_intel:        { x: 562, y: 150, w: 158, h: 40, label: 'Threat Intel',         sub: 'KEV · EPSS · ATT&CK' },
-  policy_rag:          { x: 787, y: 150, w: 158, h: 40, label: 'Policy RAG',           sub: 'hybrid retrieval' },
-  synthesize:          { x: 450, y: 262, w: 190, h: 42, label: 'Risk & Remediation',   sub: 'deterministic scoring' },
-  critic:              { x: 450, y: 352, w: 168, h: 40, label: 'Critic / Verification', sub: 'assertions + audit' },
-  replan:              { x: 168, y: 352, w: 150, h: 40, label: 'Targeted Re-plan',     sub: 'narrow gap list' },
-  respond:             { x: 450, y: 435, w: 168, h: 38, label: 'Response',             sub: 'role-adapted' }
+  plan:                { x: 450, y: 38,  w: 168, h: 40, label: 'Supervisor / Planner', sub: 'decides what to look up' },
+  asset_exposure:      { x: 112, y: 150, w: 158, h: 40, label: 'Asset Exposure',       sub: 'what do we run?' },
+  vulnerability_intel: { x: 337, y: 150, w: 158, h: 40, label: 'Vulnerability Intel',  sub: 'what is the flaw?' },
+  threat_intel:        { x: 562, y: 150, w: 158, h: 40, label: 'Threat Intel',         sub: 'is it being attacked?' },
+  policy_rag:          { x: 787, y: 150, w: 158, h: 40, label: 'Policy RAG',           sub: 'what does policy say?' },
+  synthesize:          { x: 450, y: 262, w: 190, h: 42, label: 'Risk & Remediation',   sub: 'ranked by fixed rules' },
+  critic:              { x: 450, y: 352, w: 168, h: 40, label: 'Critic / Verification', sub: 'checks every claim' },
+  replan:              { x: 168, y: 352, w: 150, h: 40, label: 'Targeted Re-plan',     sub: 'fills a specific gap' },
+  respond:             { x: 450, y: 435, w: 168, h: 38, label: 'Response',             sub: 'written for you' }
 };
 
 const SPECIALISTS = ['asset_exposure', 'vulnerability_intel', 'threat_intel', 'policy_rag'];
@@ -515,6 +516,12 @@ function renderFinal(payload) {
     if (window.htmx) htmx.process(list);
   } else {
     box.classList.add('hidden');
+  }
+
+  // Pull the per-node cost breakdown for this run.
+  if (payload.run_id && window.htmx) {
+    htmx.ajax('GET', '/fragments/run-cost/' + encodeURIComponent(payload.run_id),
+              { target: '#run-cost', swap: 'innerHTML' });
   }
 
   section.scrollIntoView({ behavior: 'smooth', block: 'start' });

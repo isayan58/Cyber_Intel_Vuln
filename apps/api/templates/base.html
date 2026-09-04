@@ -23,6 +23,7 @@
     tailwind.config = { darkMode: 'class', corePlugins: { preflight: true } };
   </script>
   <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/charts.js" defer></script>
 </head>
 
 <body class="h-full antialiased">
@@ -126,39 +127,7 @@
   }
   syncThemeLabel();
 
-  // Count-up for hero numbers.
-  function countUp(el) {
-    var target = parseFloat(el.dataset.count || '0');
-    var decimals = parseInt(el.dataset.decimals || '0', 10);
-    if (!isFinite(target)) { el.textContent = '—'; return; }
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      el.textContent = target.toLocaleString(undefined, {minimumFractionDigits: decimals, maximumFractionDigits: decimals});
-      return;
-    }
-    var start = performance.now(), dur = 850;
-    function frame(now) {
-      var p = Math.min((now - start) / dur, 1);
-      var eased = 1 - Math.pow(1 - p, 3);
-      el.textContent = (target * eased).toLocaleString(undefined,
-        {minimumFractionDigits: decimals, maximumFractionDigits: decimals});
-      if (p < 1) requestAnimationFrame(frame);
-    }
-    requestAnimationFrame(frame);
-  }
-  function initCounters(root) {
-    (root || document).querySelectorAll('[data-count]:not([data-counted])').forEach(function (el) {
-      el.setAttribute('data-counted', '1');
-      countUp(el);
-    });
-  }
-  function initBars(root) {
-    (root || document).querySelectorAll('[data-width]:not([data-widened])').forEach(function (el) {
-      el.setAttribute('data-widened', '1');
-      requestAnimationFrame(function () { el.style.width = el.dataset.width; });
-    });
-  }
-  document.addEventListener('DOMContentLoaded', function () { initCounters(); initBars(); });
-  document.body.addEventListener('htmx:afterSwap', function (e) { initCounters(e.target); initBars(e.target); });
+  // Count-up, reveal and tooltips are handled by /static/charts.js.
 </script>
 
 {% block scripts %}{% endblock %}

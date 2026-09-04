@@ -1,179 +1,284 @@
 {# =========================================================================
-   Reusable chart and UI components.
+   Chart and UI components.
 
-   Charts are inline SVG — no charting library, so nothing to load from a CDN
-   and nothing to theme twice. Colours come from CSS custom properties, so a
-   theme toggle repaints every mark without re-rendering.
+   Inline SVG, no charting library — so every mark inherits the theme's CSS
+   custom properties and a theme toggle repaints the page without re-rendering.
+   Interaction (tooltips, hover highlight, reveal-on-scroll, count-up) comes
+   from static/charts.js.
 
-   Discipline the marks follow (from the visualisation method):
-     * recessive grid and axes, thin marks, 4px rounded data-ends at the baseline
-     * a 2px surface gap between adjacent fills
-     * a legend whenever there are ≥ 2 series, plus direct labels
-     * no dual axes anywhere
-     * status colours (P1–P4) always carry a text label, never colour alone
+   Written for a reader who is not a security specialist:
+     * every chart states its question as a subtitle, not a jargon title
+     * every number is also present as text, never only as a mark
+     * status colours always ship with a word, never colour alone
+     * a legend appears whenever there are two or more series
    ========================================================================= #}
 
 
-{# ---- priority band donut ------------------------------------------------ #}
-{% macro band_donut(rows, total_label='findings') %}
-  {% set bands = {'P1': 'var(--critical)', 'P2': 'var(--serious)',
-                  'P3': 'var(--warning)',  'P4': 'var(--series-1)'} %}
+{# ---- section header ----------------------------------------------------- #}
+{% macro chart_head(title, question, hint='') %}
+  <div class="mb-4">
+    <div class="flex items-baseline justify-between gap-3 flex-wrap">
+      <h2 class="text-[13.5px] font-semibold">{{ title }}</h2>
+      {% if hint %}<span class="text-[10px] t3">{{ hint }}</span>{% endif %}
+    </div>
+    <p class="text-[11px] t2 mt-1 max-w-2xl leading-snug">{{ question }}</p>
+  </div>
+{% endmacro %}
+
+
+{# ---- hero number -------------------------------------------------------- #}
+{% macro hero(value, headline, sub, tone='accent', icon='') %}
+  <div class="card card-lit card-hover p-5 fade-up relative overflow-hidden">
+    <div class="hero-glow hero-glow-{{ tone }}"></div>
+    <div class="relative">
+      <div class="flex items-baseline gap-2.5">
+        <span class="text-[42px] font-semibold leading-none tabular-nums tone-{{ tone }}"
+              data-count="{{ value if value is not none else 0 }}">0</span>
+        <span class="text-[12.5px] font-medium t1 leading-tight">{{ headline }}</span>
+      </div>
+      <p class="text-[11px] t2 mt-2.5 leading-snug">{{ sub }}</p>
+    </div>
+  </div>
+{% endmacro %}
+
+
+{# ---- decision tile ------------------------------------------------------ #}
+{% macro decision(value, label, detail, tone='accent', tip='') %}
+  <div class="card card-hover p-4 fade-up decision-tile tone-border-{{ tone }}"
+       {% if tip %}data-tip="{{ tip }}"{% endif %}>
+    <div class="text-[27px] font-semibold leading-none tabular-nums tone-{{ tone }}"
+         data-count="{{ value if value is not none else 0 }}">0</div>
+    <div class="text-[11.5px] font-medium mt-2">{{ label }}</div>
+    <div class="text-[10px] t3 mt-1 leading-snug">{{ detail }}</div>
+  </div>
+{% endmacro %}
+
+
+{# ---- priority donut (interactive) --------------------------------------- #}
+{% macro band_donut(rows, total_label='issues') %}
+  {% set meta = {
+      'P1': ('var(--critical)', 'Act now'),
+      'P2': ('var(--serious)',  'Act this week'),
+      'P3': ('var(--warning)',  'Schedule'),
+      'P4': ('var(--series-1)', 'Routine')} %}
   {% set total = rows | sum(attribute='n') if rows else 0 %}
-  <div class="flex items-center gap-6 flex-wrap">
+  <div class="flex items-center gap-7 flex-wrap" data-series-group>
     <div class="relative shrink-0">
-      <svg viewBox="0 0 132 132" class="w-[132px] h-[132px] -rotate-90" role="img"
-           aria-label="Open findings by priority band">
-        <circle cx="66" cy="66" r="52" fill="none" stroke="var(--grid)" stroke-width="15"/>
+      <svg viewBox="0 0 150 150" class="w-[150px] h-[150px] -rotate-90" role="img"
+           aria-label="Open issues by urgency band">
+        <circle cx="75" cy="75" r="58" fill="none" stroke="var(--grid)" stroke-width="17"/>
         {% set ns = namespace(offset=0) %}
         {% for row in rows %}
           {% set frac = (row.n / total) if total else 0 %}
-          {% set dash = frac * 326.7 %}
-          <circle cx="66" cy="66" r="52" fill="none"
-                  stroke="{{ bands.get(row.band, 'var(--text-3)') }}"
-                  stroke-width="15"
-                  stroke-dasharray="{{ '%.2f'|format(dash - 2 if dash > 4 else dash) }} 326.7"
+          {% set dash = frac * 364.4 %}
+          {% set colour = meta.get(row.band, ('var(--text-3)','')) [0] %}
+          <circle class="donut-arc" cx="75" cy="75" r="58" fill="none"
+                  stroke="{{ colour }}" stroke-width="17"
+                  data-series="{{ row.band }}"
+                  stroke-dasharray="{{ '%.2f'|format(dash - 2.5 if dash > 6 else dash) }} 364.4"
                   stroke-dashoffset="-{{ '%.2f'|format(ns.offset) }}"
-                  stroke-linecap="butt">
-            <title>{{ row.band }}: {{ row.n }} findings</title>
-          </circle>
+                  data-tip="<b>{{ row.band }} — {{ meta.get(row.band, ('','')) [1] }}</b><br>
+                            {{ row.n }} of {{ total }} issues
+                            ({{ '%.0f'|format(100 * row.n / total) if total else 0 }}%)"></circle>
           {% set ns.offset = ns.offset + dash %}
         {% endfor %}
       </svg>
-      <div class="absolute inset-0 flex flex-col items-center justify-center">
-        <span class="text-[22px] font-semibold leading-none" style="font-variant-numeric: tabular-nums"
+      <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <span class="text-[26px] font-semibold leading-none tabular-nums"
               data-count="{{ total }}">0</span>
-        <span class="text-[9px] t3 mt-1">{{ total_label }}</span>
+        <span class="text-[9.5px] t3 mt-1">{{ total_label }}</span>
       </div>
     </div>
 
-    {# Legend — identity is never carried by colour alone. #}
-    <div class="space-y-2 min-w-[132px]">
+    <div class="space-y-2.5 min-w-[190px]">
       {% for row in rows %}
-      <div class="flex items-center gap-2.5 text-[11.5px]">
-        <span class="legend-swatch" style="background: {{ bands.get(row.band, 'var(--text-3)') }}"></span>
-        <span class="t2 w-6 font-medium">{{ row.band }}</span>
+      {% set colour = meta.get(row.band, ('var(--text-3)','')) [0] %}
+      <div class="flex items-center gap-3 text-[12px] legend-row" data-series="{{ row.band }}"
+           data-tip="{{ row.n }} issues in {{ row.band }}">
+        <span class="legend-swatch" style="background: {{ colour }}"></span>
+        <span class="t1 font-medium flex-1">{{ meta.get(row.band, ('','—')) [1] }}</span>
         <span class="t1 font-semibold tabular-nums">{{ row.n }}</span>
-        <span class="t3 text-[10px]">
-          {{ '%.0f'|format(100 * row.n / total) if total else 0 }}%
-        </span>
       </div>
       {% endfor %}
-      {% if not rows %}<p class="text-[11px] t3">No scored findings yet.</p>{% endif %}
+      {% if not rows %}<p class="text-[11px] t3">Nothing scored yet.</p>{% endif %}
     </div>
   </div>
 {% endmacro %}
 
 
-{# ---- horizontal bar chart ----------------------------------------------- #}
-{% macro hbar(rows, label_key, value_key, color='var(--series-1)', suffix='', max_rows=8) %}
+{# ---- horizontal bars (interactive) -------------------------------------- #}
+{% macro hbar(rows, label_key, value_key, colour='var(--series-1)', suffix='',
+              max_rows=8, tip_key=none, href_prefix=none) %}
   {% set values = rows | map(attribute=value_key) | select('number') | list %}
   {% set peak = values | max if values else 1 %}
-  <div class="space-y-2.5">
+  <div class="space-y-3">
     {% for row in rows[:max_rows] %}
       {% set value = row[value_key] or 0 %}
-      <div class="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 items-center">
-        <span class="text-[11.5px] t2 truncate" title="{{ row[label_key] }}">{{ row[label_key] }}</span>
-        <span class="text-[11.5px] t1 font-semibold tabular-nums">{{ value|round(0)|int }}{{ suffix }}</span>
-        <div class="col-span-2 h-[7px] rounded" style="background: var(--grid)">
-          <div class="h-full rounded-r"
-               data-width="{{ '%.1f'|format(100 * value / peak if peak else 0) }}%"
-               style="width:0; background: {{ color }}; transition: width .85s cubic-bezier(.2,.75,.3,1)"></div>
+      {% set pct = 100 * value / peak if peak else 0 %}
+      <div class="bar-row" data-tip="<b>{{ row[label_key] }}</b><br>{{ value|round(0)|int }}{{ suffix }}{% if tip_key and row[tip_key] %}<br>{{ row[tip_key] }}{% endif %}">
+        <div class="flex items-baseline justify-between gap-3 mb-1">
+          <span class="text-[11.5px] t1 truncate">{{ row[label_key] }}</span>
+          <span class="text-[11.5px] font-semibold tabular-nums shrink-0">
+            {{ value|round(0)|int }}{{ suffix }}
+          </span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill" style="width: {{ '%.1f'|format(pct) }}%;
+               background: {{ colour }}"></div>
         </div>
       </div>
     {% endfor %}
-    {% if not rows %}<p class="text-[11px] t3">No data.</p>{% endif %}
+    {% if not rows %}<p class="text-[11px] t3">No data yet.</p>{% endif %}
   </div>
 {% endmacro %}
 
 
-{# ---- sparkline ---------------------------------------------------------- #}
-{% macro sparkline(values, color='var(--accent)', height=30) %}
-  {% if values and values|length > 1 %}
-    {% set lo = values|min %}
-    {% set hi = values|max %}
-    {% set span = (hi - lo) if (hi - lo) > 0 else 1 %}
-    <svg viewBox="0 0 100 {{ height }}" preserveAspectRatio="none"
-         class="w-full" style="height: {{ height }}px" aria-hidden="true">
-      <defs>
-        <linearGradient id="sparkfill-{{ color|replace('(','')|replace(')','')|replace('-','')|replace('var','')|replace('#','') }}"
-                        x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stop-color="{{ color }}" stop-opacity=".28"/>
-          <stop offset="100%" stop-color="{{ color }}" stop-opacity="0"/>
-        </linearGradient>
-      </defs>
-      {% set pts = [] %}
-      {% for v in values %}
-        {% set x = 100 * loop.index0 / (values|length - 1) %}
-        {% set y = height - 3 - ((v - lo) / span) * (height - 6) %}
-        {% set _ = pts.append('%.2f,%.2f'|format(x, y)) %}
-      {% endfor %}
-      <polyline points="{{ pts|join(' ') }} 100,{{ height }} 0,{{ height }}"
-                fill="url(#sparkfill-{{ color|replace('(','')|replace(')','')|replace('-','')|replace('var','')|replace('#','') }})"
-                stroke="none"/>
-      <polyline points="{{ pts|join(' ') }}" fill="none" stroke="{{ color }}"
-                stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                vector-effect="non-scaling-stroke"/>
-    </svg>
+{# ---- rank-movement chart: the platform's core claim, drawn --------------- #}
+{% macro value_proof(proof) %}
+  {% if not proof.available or not proof.rows %}
+    <p class="text-[11.5px] t3">Not enough data to compare rankings yet.</p>
   {% else %}
-    <div class="h-[{{ height }}px]"></div>
+  {% set n = proof.rows | length %}
+  {% set h = 34 * n + 46 %}
+  <div class="scroll-x">
+    <svg viewBox="0 0 620 {{ h }}" class="w-full" style="min-width:560px; height:{{ h }}px"
+         role="img" aria-label="How enterprise context reorders the queue">
+      <text x="118" y="16" text-anchor="middle" class="vp-col">{{ proof.baseline }} alone</text>
+      <text x="500" y="16" text-anchor="middle" class="vp-col">With your estate context</text>
+
+      {# Baseline positions not taken by any CVE in the final top N: label them
+         rather than leaving a gap that looks like a missing row. #}
+      {% set shown = proof.rows | map(attribute='rank_by_cvss') | list %}
+      {% for slot in range(1, n + 1) %}
+        {% if slot not in shown %}
+          {% set ys = 46 + 34 * (slot - 1) %}
+          <rect x="14" y="{{ ys - 12 }}" width="182" height="24" rx="6"
+                class="vp-chip" opacity=".45"/>
+          <text x="24" y="{{ ys + 4 }}" class="vp-text-dim">#{{ slot }}</text>
+          <text x="186" y="{{ ys + 4 }}" text-anchor="end" class="vp-text-dim"
+                >dropped out of the top {{ n }}</text>
+        {% endif %}
+      {% endfor %}
+
+      {% for row in proof.rows %}
+        {% set y2 = 46 + 34 * loop.index0 %}
+        {% set y1 = 46 + 34 * (row.rank_by_cvss - 1) %}
+        {% set y1c = y1 if row.rank_by_cvss <= n else (h - 24) %}
+        {% set moved = row.movement != 0 %}
+        {% set colour = 'var(--critical)' if row.movement > 0 else ('var(--series-1)' if row.movement < 0 else 'var(--text-3)') %}
+        <g class="vp-row" data-tip="<b>{{ row.cve_id }}</b><br>{{ row.product }} · {{ row.assets }} assets<br>
+                  {% if row.movement > 0 %}Moved up {{ row.movement }} place{{ 's' if row.movement != 1 }}
+                  {% elif row.movement < 0 %}Moved down {{ -row.movement }} place{{ 's' if row.movement != -1 }}
+                  {% else %}Same position{% endif %}<br>{{ row.reason }}">
+          <line x1="196" y1="{{ y1c }}" x2="404" y2="{{ y2 }}"
+                stroke="{{ colour }}" stroke-width="{{ 2.4 if moved else 1.2 }}"
+                opacity="{{ 0.95 if moved else 0.32 }}"
+                stroke-dasharray="{{ '0' if row.rank_by_cvss <= n else '4 4' }}"/>
+          <rect x="14" y="{{ y1c - 12 }}" width="182" height="24" rx="6" class="vp-chip"/>
+          <text x="24" y="{{ y1c + 4 }}" class="vp-text">
+            {{ '#%d'|format(row.rank_by_cvss) if row.rank_by_cvss <= n else 'not in top %d'|format(n) }}
+          </text>
+          <text x="186" y="{{ y1c + 4 }}" text-anchor="end" class="vp-text-dim">{{ row.cve_id }}</text>
+
+          <rect x="404" y="{{ y2 - 12 }}" width="202" height="24" rx="6" class="vp-chip vp-chip-final"/>
+          <text x="414" y="{{ y2 + 4 }}" class="vp-text">#{{ row.rank_by_score }} {{ row.cve_id }}</text>
+          {% if moved %}
+          <text x="598" y="{{ y2 + 4 }}" text-anchor="end" class="vp-move"
+                fill="{{ colour }}">{{ '%+d'|format(row.movement) }}</text>
+          {% endif %}
+        </g>
+      {% endfor %}
+    </svg>
+  </div>
+  <div class="legend mt-3">
+    <span class="legend-item"><span class="legend-swatch" style="background: var(--critical)"></span>
+      Promoted — your estate makes it more urgent</span>
+    <span class="legend-item"><span class="legend-swatch" style="background: var(--series-1)"></span>
+      Demoted — less relevant to you than the score suggests</span>
+    <span class="legend-item"><span class="legend-swatch" style="background: var(--text-3)"></span>
+      Unchanged</span>
+  </div>
   {% endif %}
 {% endmacro %}
 
 
-{# ---- stat tile ---------------------------------------------------------- #}
-{% macro stat(value, label, tone='', spark=none, spark_color='var(--accent)', decimals=0, hint='') %}
-  <div class="card card-lit card-hover stat fade-up">
-    <div class="stat-value {{ tone }}" data-count="{{ value if value is not none else 0 }}"
-         data-decimals="{{ decimals }}">0</div>
-    <div class="stat-label">{{ label }}</div>
-    {% if hint %}<div class="text-[10px] t3 mt-1">{{ hint }}</div>{% endif %}
-    {% if spark %}<div class="stat-spark">{{ sparkline(spark, spark_color) }}</div>{% endif %}
+{# ---- distribution histogram --------------------------------------------- #}
+{% macro histogram(buckets, colour='var(--series-1)', height=110) %}
+  {# A real backlog is heavily skewed: hundreds of thousands of low-priority
+     items against a few thousand urgent ones. On a linear scale the urgent
+     bars vanish, which is the opposite of the message. Bars are therefore
+     square-rooted so the small ones stay visible, and every bar is labelled
+     with its true count so the shape never has to be read off the height. #}
+  {% set peak = (buckets | map(attribute='n') | list | max) if buckets else 1 %}
+  <div class="flex items-end gap-1.5" style="height: {{ height }}px" data-series-group>
+    {% for b in buckets %}
+      {% set pct = (100 * (b.n / peak) ** 0.5) if peak and b.n else 0 %}
+      <div class="flex-1 flex flex-col justify-end h-full histo-col" data-series="{{ b.label }}"
+           data-tip="<b>Priority {{ b.low }}–{{ b.high }}</b><br>{{ '{:,}'.format(b.n) }} issues">
+        <div class="text-[9px] t2 text-center mb-1 tabular-nums whitespace-nowrap">
+          {% if b.n >= 1000 %}{{ (b.n / 1000)|round(1) }}k{% else %}{{ b.n }}{% endif %}
+        </div>
+        <div class="histo-bar"
+             style="height: {{ '%.1f'|format(pct) }}%; background: {{ b.colour or colour }}"></div>
+      </div>
+    {% endfor %}
+  </div>
+  <div class="flex gap-1.5 mt-2">
+    {% for b in buckets %}
+      <div class="flex-1 text-center">
+        <div class="text-[9.5px] t3">{{ b.label }}</div>
+      </div>
+    {% endfor %}
   </div>
 {% endmacro %}
 
 
 {# ---- score waterfall ---------------------------------------------------- #}
 {% macro waterfall(explanation) %}
-  {% set colors = {
-      'cvss':        'var(--series-1)',
-      'epss':        'var(--series-2)',
-      'kev':         'var(--series-3)',
-      'criticality': 'var(--series-4)',
-      'exposure':    'var(--series-5)',
-      'sensitivity': 'var(--series-6)'
-  } %}
-  {% set contributions = explanation.breakdown | map(attribute='contribution')
-                         | select('number') | list %}
+  {% set meta = {
+      'cvss':        ('var(--series-1)', 'Technical severity of the flaw'),
+      'epss':        ('var(--series-2)', 'Likelihood it gets exploited soon'),
+      'kev':         ('var(--series-3)', 'Confirmed exploited in the wild'),
+      'criticality': ('var(--series-4)', 'How important this system is to the business'),
+      'exposure':    ('var(--series-5)', 'Reachable from the internet'),
+      'sensitivity': ('var(--series-6)', 'Data sensitivity and patch age')} %}
+  {% set contributions = explanation.breakdown | map(attribute='contribution') | select('number') | list %}
   {% set peak = contributions | max if contributions else 1 %}
 
-  <div class="waterfall">
-    {% for component in explanation.breakdown %}
-      {% set contribution = component.contribution or 0 %}
-      <div class="wf-row">
-        <span class="wf-name">{{ component.component }}</span>
-        <div class="wf-track">
-          <div class="wf-fill"
-               data-width="{{ '%.1f'|format(100 * contribution / peak if peak else 0) }}%"
-               style="background: {{ colors.get(component.component, 'var(--text-3)') }}"></div>
+  <div class="space-y-3" data-series-group>
+    {% for c in explanation.breakdown %}
+      {% set contribution = c.contribution or 0 %}
+      {% set colour = meta.get(c.component, ('var(--text-3)','')) [0] %}
+      <div data-series="{{ c.component }}"
+           data-tip="<b>{{ meta.get(c.component, ('','')) [1] }}</b><br>
+                     value {{ '%.2f'|format(c.normalised_value) if c.normalised_value is not none else '—' }}
+                     × weight {{ '%.2f'|format(c.weight) if c.weight is not none else '—' }}
+                     = <b>{{ '%.1f'|format(contribution) }} points</b>">
+        <div class="flex items-baseline justify-between gap-3 mb-1">
+          <span class="text-[11.5px] t1">{{ meta.get(c.component, ('', c.component)) [1] }}</span>
+          <span class="text-[11.5px] font-semibold tabular-nums shrink-0">
+            +{{ '%.1f'|format(contribution) }}
+          </span>
         </div>
-        <span class="wf-value">+{{ '%.1f'|format(contribution) }}</span>
-        <span></span>
-        <span class="wf-meta col-span-2">
-          value {{ '%.2f'|format(component.normalised_value) if component.normalised_value is not none else '—' }}
-          × weight {{ '%.2f'|format(component.weight) if component.weight is not none else '—' }}
-        </span>
+        <div class="bar-track">
+          <div class="bar-fill" style="width: {{ '%.1f'|format(100 * contribution / peak if peak else 0) }}%;
+               background: {{ colour }}"></div>
+        </div>
       </div>
     {% endfor %}
   </div>
 
-  <div class="flex items-baseline justify-between mt-4 pt-3" style="border-top: 1px solid var(--border)">
-    <span class="eyebrow">Enterprise priority score</span>
-    <span class="text-[26px] font-semibold tabular-nums"
+  <div class="flex items-baseline justify-between mt-5 pt-4" style="border-top: 1px solid var(--border)">
+    <div>
+      <div class="eyebrow">Priority score</div>
+      <div class="text-[10px] t3 mt-0.5">out of 100</div>
+    </div>
+    <span class="text-[30px] font-semibold tabular-nums"
           data-count="{{ explanation.score or 0 }}" data-decimals="1">0</span>
   </div>
-  <p class="text-[10px] t3 mt-1">
-    Model <span class="mono">{{ explanation.model_version }}</span> · computed by a deterministic
-    function. The language model may explain this number but cannot change it.
+  <p class="text-[10px] t3 mt-2 leading-snug">
+    Calculated by a fixed formula, not by an AI. The assistant can explain this number
+    but cannot change it. Model <span class="mono">{{ explanation.model_version }}</span>.
   </p>
 {% endmacro %}
 
@@ -181,27 +286,27 @@
 {# ---- inline score bar --------------------------------------------------- #}
 {% macro scorebar(score) %}
   {% set value = score or 0 %}
-  {% set color = 'var(--critical)' if value >= 80 else
-                 'var(--serious)'  if value >= 60 else
-                 'var(--warning)'  if value >= 40 else 'var(--series-1)' %}
+  {% set colour = 'var(--critical)' if value >= 80 else
+                  'var(--serious)'  if value >= 60 else
+                  'var(--warning)'  if value >= 40 else 'var(--series-1)' %}
   <div class="flex items-center gap-2.5">
     <span class="tabular-nums font-semibold text-[12px] w-7 text-right">
       {{ value|round(0)|int if score is not none else '—' }}
     </span>
     <div class="scorebar flex-1">
-      <span data-width="{{ value }}%" style="width:0; background: {{ color }}"></span>
+      <span style="width: {{ value }}%; background: {{ colour }}"></span>
     </div>
   </div>
 {% endmacro %}
 
 
-{# ---- priority band pill ------------------------------------------------- #}
+{# ---- urgency pill: says what to DO, not what band it is ------------------ #}
 {% macro band_pill(score) %}
-  {% set value = score if score is not none else -1 %}
-  {% if value >= 80 %}<span class="band band-p1">P1 Critical</span>
-  {% elif value >= 60 %}<span class="band band-p2">P2 High</span>
-  {% elif value >= 40 %}<span class="band band-p3">P3 Medium</span>
-  {% elif value >= 0 %}<span class="band band-p4">P4 Low</span>
+  {% set v = score if score is not none else -1 %}
+  {% if v >= 80 %}<span class="band band-p1">Act now</span>
+  {% elif v >= 60 %}<span class="band band-p2">This week</span>
+  {% elif v >= 40 %}<span class="band band-p3">Schedule</span>
+  {% elif v >= 0 %}<span class="band band-p4">Routine</span>
   {% else %}<span class="band band-unknown">Unscored</span>{% endif %}
 {% endmacro %}
 
@@ -210,25 +315,23 @@
 {% macro signal_chips(row) %}
   <div class="flex flex-wrap gap-1.5">
     {% if row.kev_listed %}
-      <span class="chip chip-kev" title="Listed in the CISA Known Exploited Vulnerabilities catalogue">
-        ⚠ KEV
-      </span>
+      <span class="chip chip-kev" data-tip="Confirmed being exploited by attackers right now
+        (CISA Known Exploited Vulnerabilities catalogue)">⚠ Exploited now</span>
     {% endif %}
     {% if row.internet_facing or row.any_internet_facing %}
-      <span class="chip chip-exposed" title="Reachable from an untrusted network">◈ Exposed</span>
+      <span class="chip chip-exposed" data-tip="Reachable from the public internet,
+        so an attacker does not need a foothold first">◈ Internet-facing</span>
     {% endif %}
     {% if row.sla_breached or (row.breached_count and row.breached_count > 0) %}
-      <span class="chip chip-breach" title="Past the policy remediation deadline">◷ SLA breach</span>
+      <span class="chip chip-breach" data-tip="Past the deadline your own policy sets">◷ Overdue</span>
     {% endif %}
     {% if row.version_verdict == 'unknown' %}
-      <span class="chip" title="Version comparison was inconclusive — not confirmed affected">
-        ? Unconfirmed
-      </span>
+      <span class="chip" data-tip="We could not confirm the installed version falls in the
+        vulnerable range. Reported as unconfirmed rather than guessed.">? Unconfirmed</span>
     {% endif %}
     {% if row.epss is not none and row.epss >= 0.1 %}
-      <span class="chip" title="EPSS probability at or above 10%">
-        ↑ EPSS {{ '%.0f'|format(row.epss * 100) }}%
-      </span>
+      <span class="chip" data-tip="{{ '%.0f'|format(row.epss * 100) }}% modelled probability of
+        exploitation in the next 30 days (FIRST EPSS)">↑ {{ '%.0f'|format(row.epss * 100) }}% likely</span>
     {% endif %}
   </div>
 {% endmacro %}

@@ -86,11 +86,17 @@ def rank_findings(
         )
         for row in rows:
             row["top_assets"] = conn.query(
-                f"SELECT hostname, application_name, environment, internet_facing, "
-                f"installed_version, fixed_version, score FROM v_finding_enriched "
+                f"SELECT finding_id, hostname, application_name, environment, "
+                f"internet_facing, installed_version, fixed_version, score "
+                f"FROM v_finding_enriched "
                 f"WHERE {where} AND cve_id = ? ORDER BY score DESC LIMIT 5",
                 [*params, row["cve_id"]],
             )
+            # Carry an exemplar finding_id so the caller can pull a component
+            # breakdown for a grouped row. Without it the executive view quotes
+            # scores that nothing in the evidence can substantiate.
+            if row["top_assets"]:
+                row["exemplar_finding_id"] = row["top_assets"][0]["finding_id"]
         return {"mode": "by_cve", "count": len(rows), "findings": rows}
 
     rows = conn.query(
@@ -262,3 +268,242 @@ def _decode(value: Any) -> Any:
         except json.JSONDecodeError:
             return value
     return value
+
+
+# --------------------------------------------------------------------------
+# Executive framing
+#
+# The tools above answer an analyst's questions. These answer a CTO's, which
+# are different in kind: not "how many findings" but "what must we decide this
+# week, what does it put at risk, and is this platform earning its place".
+# --------------------------------------------------------------------------
+
+
+def executive_posture(db: Database | None = None) -> dict[str, Any]:
+    """Plain-English risk posture. Counts a board member can act on."""
+    conn = _db(db)
+    base = (
+        "FROM v_finding_enriched WHERE version_verdict = 'affected' "
+        "AND status <> 'remediated' AND risk_accepted = FALSE"
+    )
+
+    urgent = conn.query(
+        f"""
+        SELECT cve_id, max(score) AS score, count(DISTINCT asset_id) AS assets,
+               min(sla_due_date) AS due, max(product) AS product,
+               bool_or(kev_listed) AS kev, max(fixed_version) AS fix
+        {base} AND sla_days <= 7
+        GROUP BY cve_id ORDER BY score DESC LIMIT 20
+        """
+    )
+    services = conn.query(
+        f"""
+        SELECT business_service,
+               min(CASE WHEN tier IS NULL THEN 99 ELSE tier END) AS tier,
+               count(DISTINCT cve_id) AS issues,
+               count(DISTINCT asset_id) AS assets,
+               max(score) AS worst_score,
+               sum(CASE WHEN kev_listed THEN 1 ELSE 0 END) AS exploited,
+               bool_or(external_customer_facing) AS customer_facing
+        {base} AND business_service IS NOT NULL AND score >= 60
+        GROUP BY business_service ORDER BY worst_score DESC LIMIT 8
+        """
+    )
+    return {
+        "act_within_3_days": conn.scalar(f"SELECT count(DISTINCT cve_id) {base} AND sla_days <= 3") or 0,
+        "act_within_7_days": conn.scalar(f"SELECT count(DISTINCT cve_id) {base} AND sla_days <= 7") or 0,
+        "actively_exploited": conn.scalar(f"SELECT count(DISTINCT cve_id) {base} AND kev_listed") or 0,
+        "customer_facing_at_risk": conn.scalar(
+            f"SELECT count(DISTINCT business_service) {base} "
+            "AND external_customer_facing = TRUE AND score >= 60"
+        ) or 0,
+        "tier1_services_at_risk": conn.scalar(
+            f"SELECT count(DISTINCT business_service) {base} AND tier = 1 AND score >= 60"
+        ) or 0,
+        "past_deadline": conn.scalar(f"SELECT count(DISTINCT cve_id) {base} AND sla_breached") or 0,
+        "fix_available": conn.scalar(
+            f"SELECT count(DISTINCT cve_id) {base} AND fixed_version IS NOT NULL AND sla_days <= 7"
+        ) or 0,
+        "urgent": urgent,
+        "services": services,
+    }
+
+
+def value_proof(limit: int = 8, db: Database | None = None) -> dict[str, Any]:
+    """How enterprise context changes the queue versus severity alone.
+
+    This is the platform's whole argument in one dataset: rank the same
+    vulnerabilities by CVSS, then by enterprise priority, and show what moved.
+    A CVSS-ordered queue sends a team to the wrong place first; the movement
+    here is the measurable difference the platform makes.
+    """
+    conn = _db(db)
+    base = (
+        "FROM v_finding_enriched WHERE version_verdict = 'affected' "
+        "AND status <> 'remediated' AND risk_accepted = FALSE AND cve_id IS NOT NULL"
+    )
+
+    rows = conn.query(
+        f"""
+        SELECT cve_id,
+               max(cvss_base)                  AS cvss,
+               max(score)                      AS score,
+               max(epss)                       AS epss,
+               bool_or(kev_listed)             AS kev,
+               bool_or(internet_facing)        AS exposed,
+               count(DISTINCT asset_id)        AS assets,
+               min(CASE WHEN tier IS NULL THEN 99 ELSE tier END) AS tier,
+               max(product)                    AS product
+        {base}
+        GROUP BY cve_id
+        """
+    )
+    if not rows:
+        return {"available": False, "rows": [], "moved_up": 0, "moved_down": 0}
+
+    # The comparison baseline is "technical signal alone". CVSS is the natural
+    # choice, but it comes from NVD; where that has not been ingested the same
+    # argument holds using EPSS, which is a purely technical signal too. The
+    # baseline actually used is named in the payload so the chart can label it
+    # honestly rather than implying a CVSS comparison that did not happen.
+    has_cvss = any(r["cvss"] is not None for r in rows)
+    baseline = "CVSS severity" if has_cvss else "EPSS exploitation probability"
+    key = (lambda r: (-(r["cvss"] or 0), -(r["epss"] or 0))) if has_cvss \
+        else (lambda r: -(r["epss"] or 0))
+
+    by_cvss = sorted(rows, key=key)
+    by_score = sorted(rows, key=lambda r: -(r["score"] or 0))
+    cvss_rank = {r["cve_id"]: i + 1 for i, r in enumerate(by_cvss)}
+
+    out = []
+    for index, row in enumerate(by_score[:limit], start=1):
+        was = cvss_rank[row["cve_id"]]
+        out.append(
+            {
+                **row,
+                "rank_by_score": index,
+                "rank_by_cvss": was,
+                "movement": was - index,
+                "reason": _movement_reason(row, was - index),
+            }
+        )
+
+    # Would a CVSS-ordered team have reached today's top issue at all?
+    top = by_score[0]
+    return {
+        "available": True,
+        "baseline": baseline,
+        "rows": out,
+        "moved_up": sum(1 for r in out if r["movement"] > 0),
+        "moved_down": sum(1 for r in out if r["movement"] < 0),
+        "top_cve": top["cve_id"],
+        "top_cvss_rank": cvss_rank[top["cve_id"]],
+        "candidate_count": len(rows),
+    }
+
+
+def _movement_reason(row: dict[str, Any], movement: int) -> str:
+    """Why this vulnerability moved, in words a non-specialist can act on."""
+    if movement > 0:
+        drivers = []
+        if row.get("kev"):
+            drivers.append("attackers are exploiting it now")
+        if (row.get("epss") or 0) >= 0.5:
+            drivers.append("exploitation is highly likely")
+        if row.get("exposed"):
+            drivers.append("it is reachable from the internet")
+        if row.get("tier") == 1:
+            drivers.append("it sits on a Tier-1 service")
+        return "Promoted: " + (", and ".join(drivers[:2]) if drivers else "enterprise context")
+    if movement < 0:
+        drivers = []
+        if not row.get("kev"):
+            drivers.append("no confirmed exploitation")
+        if not row.get("exposed"):
+            drivers.append("not internet-facing")
+        if (row.get("tier") or 99) >= 3:
+            drivers.append("low-tier service")
+        return "Demoted: " + (", and ".join(drivers[:2]) if drivers else "limited exposure")
+    return "Unchanged by enterprise context"
+
+
+def score_distribution(buckets: int = 10, db: Database | None = None) -> list[dict[str, Any]]:
+    """Shape of the whole backlog, not just the top rows.
+
+    A table shows you fifty findings out of half a million. This shows whether
+    the estate has a long tail of low-priority noise or a genuine cluster of
+    urgent work — which is a different decision.
+    """
+    conn = _db(db)
+    rows = conn.query(
+        """
+        SELECT CAST(least(floor(score / 10), 9) AS INTEGER) AS bucket, count(*) AS n
+        FROM v_finding_enriched
+        WHERE version_verdict = 'affected' AND status <> 'remediated' AND score IS NOT NULL
+        GROUP BY bucket ORDER BY bucket
+        """
+    )
+    counts = {int(r["bucket"]): int(r["n"]) for r in rows}
+    out = []
+    for b in range(buckets):
+        low = b * 10
+        colour = ("var(--critical)" if low >= 80 else "var(--serious)" if low >= 60
+                  else "var(--warning)" if low >= 40 else "var(--series-1)")
+        out.append({"label": f"{low}", "n": counts.get(b, 0), "colour": colour,
+                    "low": low, "high": low + 10})
+    return out
+
+
+def run_cost_breakdown(run_id: str, db: Database | None = None) -> dict[str, Any]:
+    """Per-node cost and latency for one investigation.
+
+    Makes the economics of an answer visible next to the answer itself: which
+    model handled which step, and what it cost. Prices are the published
+    per-million rates for each tier.
+    """
+    import json as _json
+
+    conn = _db(db)
+    price = {"deep": (5.0, 25.0), "mid": (2.0, 10.0), "fast": (1.0, 5.0)}
+    tier_model = {"deep": "Opus 5", "mid": "Sonnet 5", "fast": "Haiku 4.5"}
+    colour = {"deep": "var(--series-2)", "mid": "var(--series-1)",
+              "fast": "var(--series-3)", None: "var(--text-3)"}
+
+    nodes, total = [], 0.0
+    for span in conn.query(
+        "SELECT * FROM agent_span WHERE run_id = ? ORDER BY seq", [run_id]
+    ):
+        detail = {}
+        try:
+            detail = _json.loads(span.get("detail") or "{}")
+        except (ValueError, TypeError):
+            pass
+        tier = detail.get("tier")
+        tin = int(span.get("input_tokens") or 0)
+        tout = int(span.get("output_tokens") or 0)
+        cost = 0.0
+        if tier in price:
+            pi, po = price[tier]
+            cost = tin / 1e6 * pi + tout / 1e6 * po
+            total += cost
+        nodes.append({
+            "node": span["node"],
+            "tier": tier,
+            "model": tier_model.get(tier, "deterministic"),
+            "colour": colour.get(tier, "var(--text-3)"),
+            "input_tokens": tin,
+            "output_tokens": tout,
+            "latency_ms": span.get("latency_ms") or 0,
+            "tool_calls": len(detail.get("tool_calls") or []),
+            "cost": round(cost, 5),
+        })
+
+    for n in nodes:
+        n["cost_share"] = round(100 * n["cost"] / total, 1) if total else 0.0
+    return {
+        "run_id": run_id,
+        "nodes": nodes,
+        "total_cost": round(total, 4),
+        "total_latency_ms": sum(n["latency_ms"] for n in nodes),
+        "deterministic_nodes": [n["node"] for n in nodes if not n["tier"]],
+    }

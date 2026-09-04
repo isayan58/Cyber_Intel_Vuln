@@ -55,9 +55,12 @@ class RiskRemediationAgent(Agent):
 
         explanations = {}
         for finding in findings[: min(limit, 10)]:
-            finding_id = finding.get("finding_id")
+            # Grouped rows have no finding_id of their own; they carry an
+            # exemplar so the score breakdown is always obtainable.
+            finding_id = finding.get("finding_id") or finding.get("exemplar_finding_id")
             if finding_id is not None:
-                explanations[str(finding_id)] = self.tools.call(
+                key = str(finding.get("cve_id") or finding_id)
+                explanations[key] = self.tools.call(
                     "explain_score", finding_id=int(finding_id)
                 )
 
@@ -84,12 +87,12 @@ class RiskRemediationAgent(Agent):
                     "score_explanations": gathered.get("score_explanations"),
                     "portfolio": gathered.get("portfolio"),
                 },
-                limit=26000,
+                limit=14000,
             ),
             asset_context=as_json(
                 (evidence.get("asset_exposure") or {}).get("interpretation")
                 or (evidence.get("asset_exposure") or {}).get("aggregates"),
-                limit=6000,
+                limit=3500,
             ),
             vulnerability_context=as_json(
                 (evidence.get("vulnerability_intel") or {}).get("interpretation"), limit=6000
@@ -97,7 +100,7 @@ class RiskRemediationAgent(Agent):
             threat_context=as_json(
                 (evidence.get("threat_intel") or {}).get("interpretation")
                 or (evidence.get("threat_intel") or {}).get("signals_summary"),
-                limit=6000,
+                limit=3500,
             ),
             policy_context=as_json(
                 {
@@ -107,7 +110,7 @@ class RiskRemediationAgent(Agent):
                     "sla_rules": (evidence.get("policy_rag") or {}).get("sla_rules"),
                     "conflicts": (evidence.get("policy_rag") or {}).get("conflicts"),
                 },
-                limit=8000,
+                limit=5000,
             ),
         )
 
@@ -124,6 +127,11 @@ class RiskRemediationAgent(Agent):
         result = super().run(state)
         result.prompt_version = getattr(self, "_last_prompt_version", None)
         result.usage = getattr(self, "_last_usage", {})
+        result.span.update({
+            "input_tokens": result.usage.get("input_tokens"),
+            "output_tokens": result.usage.get("output_tokens"),
+            "tier": result.usage.get("tier"),
+        })
         return result
 
 

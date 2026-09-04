@@ -28,6 +28,11 @@ from vulnintel.risk.versions import (
 
 log = get_logger(__name__)
 
+# Ceiling on CPE ranges evaluated per installed component. A widely used
+# product accumulates tens of thousands of ranges over its lifetime; the
+# version comparison only needs enough to find a match.
+MAX_CPE_CANDIDATES = 400
+
 
 def build_purl(ecosystem: str, name: str, version: str | None = None) -> str:
     """Package URL — the canonical key for OSV matching."""
@@ -207,27 +212,38 @@ class FindingMatcher:
             "version_start_excluding, version_end_including, version_end_excluding "
             "FROM cve_cpe_match WHERE vulnerable = TRUE"
         )
-        by_product: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        # Two indexes, both built once. The product-only index is the important
+        # one: vendor strings in an inventory rarely match NVD's vendor exactly,
+        # so most rows fall through to it. Deriving that fallback by scanning
+        # the vendor-keyed index per inventory row is quadratic — roughly six
+        # billion dict visits against a real NVD corpus — and never completes.
+        by_vendor_product: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        by_product_only: dict[str, list[dict[str, Any]]] = {}
         for row in matches:
-            key = ((row["cpe_vendor"] or "").lower(), (row["cpe_product"] or "").lower())
-            by_product.setdefault(key, []).append(row)
+            vendor = (row["cpe_vendor"] or "").lower()
+            product = (row["cpe_product"] or "").lower()
+            by_vendor_product.setdefault((vendor, product), []).append(row)
+            by_product_only.setdefault(product, []).append(row)
 
         findings: list[dict[str, Any]] = []
         for item in inventory:
             vendor = (item.get("vendor") or "").lower().replace(" ", "_")
             product = (item.get("product") or "").lower().replace(" ", "_")
-            candidates = by_product.get((vendor, product), [])
-            if not candidates:
-                # Vendor strings are unreliable; fall back to product-only.
-                candidates = [
-                    row
-                    for (v, p), rows in by_product.items()
-                    if p == product
-                    for row in rows
-                ]
-                confidence = 0.6
-            else:
+
+            candidates = by_vendor_product.get((vendor, product))
+            if candidates:
                 confidence = float(item.get("cpe23_confidence") or 0.9)
+            else:
+                # Product name matched but vendor did not: usable, but the
+                # mapping is weaker and the finding says so.
+                candidates = by_product_only.get(product, [])
+                confidence = 0.6
+
+            # A single popular product can carry tens of thousands of CPE
+            # ranges across its whole history. Comparing every one against one
+            # installed version is wasted work, so cap the candidate set.
+            if len(candidates) > MAX_CPE_CANDIDATES:
+                candidates = candidates[:MAX_CPE_CANDIDATES]
 
             grouped: dict[str, list[dict[str, Any]]] = {}
             for candidate in candidates:

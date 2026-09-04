@@ -103,6 +103,10 @@ class Agent(abc.ABC):
                 for call in self.tools.calls
             ],
             "started_at": datetime.now(UTC).replace(tzinfo=None),
+            "input_tokens": result.usage.get("input_tokens"),
+            "output_tokens": result.usage.get("output_tokens"),
+            "cache_read_tokens": result.usage.get("cache_read_tokens"),
+            "tier": result.usage.get("tier"),
         }
         if result.prompt_version:
             result.span["prompt_version"] = result.prompt_version

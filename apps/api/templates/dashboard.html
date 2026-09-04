@@ -1,13 +1,12 @@
 {% extends "base.html" %}
 {% import "macros.html" as ui %}
 
-{% block title %}Dashboard · VulnIntel AI{% endblock %}
-{% block eyebrow %}Enterprise risk posture{% endblock %}
-{% block heading %}Dashboard{% endblock %}
+{% block title %}Security posture · VulnIntel AI{% endblock %}
+{% block eyebrow %}Week of {{ today }}{% endblock %}
+{% block heading %}Where your security effort should go this week{% endblock %}
 {% block subheading %}
-  Deterministic prioritisation across {{ inventory.assets|num }} synthetic assets and
-  {{ inventory.applications|num }} applications. Every score below was computed by a
-  scoring function, not a language model.
+  Across {{ inventory.assets|num }} systems and {{ inventory.applications|num }} applications.
+  Every number here is calculated, not estimated — you can open any of them and see the arithmetic.
 {% endblock %}
 
 {% block headeraside %}
@@ -15,99 +14,136 @@
     <svg viewBox="0 0 24 24" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2">
       <path d="M13 2 4.5 12.5H11l-1 9.5 9.5-11.5H13l1-8.5Z" stroke-linejoin="round"/>
     </svg>
-    Start an investigation
+    Ask a question
   </a>
 {% endblock %}
 
 {% block content %}
 
 {% if not summary.open_findings %}
-  {{ ui.empty(
-      'No scored findings yet',
-      'The estate is generated but no vulnerability intelligence has been matched against it.
-       Run the ingestion and scoring pipeline to populate this dashboard.',
-      '/system', 'Check pipeline status') }}
-{% endif %}
+  {{ ui.empty('Nothing to show yet',
+     'The estate is generated but no vulnerability intelligence has been matched against it.',
+     '/system', 'Check pipeline status') }}
+{% else %}
 
-<!-- ============ Stat tiles ============ -->
-<section class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-  {{ ui.stat(summary.open_findings, 'Open affected findings', 'stat-accent',
-             hint='Deterministic "affected" verdicts only') }}
-  {{ ui.stat(summary.kev_findings, 'Known exploited (KEV)', 'stat-critical',
-             hint='CISA catalogue membership') }}
-  {{ ui.stat(summary.internet_facing_findings, 'On internet-facing assets', 'stat-warning',
-             hint='Reachable from untrusted networks') }}
-  {{ ui.stat(summary.sla_breaches, 'Past policy deadline', 'stat-warning',
-             hint='Breached the remediation SLA') }}
-</section>
-
-<!-- ============ Distribution + concentration ============ -->
-<section class="grid grid-cols-1 xl:grid-cols-3 gap-5">
+<!-- ============ THE ANSWER, IN ONE LINE ============ -->
+<section class="grid grid-cols-1 lg:grid-cols-[1.15fr_1fr] gap-5">
+  {{ ui.hero(
+      posture.act_within_3_days,
+      'issues need action within 3 days',
+      'These are on systems that are internet-facing, business-critical, or already
+       being attacked. Your own policy sets the 3-day deadline for this category.',
+      'critical') }}
 
   <div class="card card-lit p-5 fade-up">
-    <div class="flex items-baseline justify-between mb-4">
-      <div>
-        <h2 class="text-[13px] font-semibold">Priority distribution</h2>
-        <p class="text-[10.5px] t3 mt-0.5">Bands derived from the stored score</p>
+    <div class="eyebrow mb-3">What that means in practice</div>
+    <div class="space-y-3 text-[12px]">
+      <div class="flex items-start gap-2.5">
+        <span class="dot-critical"></span>
+        <span><b class="tabular-nums">{{ posture.actively_exploited }}</b> of them are being
+          <b>exploited by attackers right now</b> — not theoretical.</span>
       </div>
-    </div>
-    {{ ui.band_donut(summary.by_band, 'open findings') }}
-  </div>
-
-  <div class="card card-lit p-5 fade-up">
-    <div class="mb-4">
-      <h2 class="text-[13px] font-semibold">Highest-risk applications</h2>
-      <p class="text-[10.5px] t3 mt-0.5">By worst finding score</p>
-    </div>
-    {{ ui.hbar(summary.top_applications, 'application_name', 'max_score', 'var(--series-1)') }}
-  </div>
-
-  <div class="card card-lit p-5 fade-up">
-    <div class="mb-4">
-      <h2 class="text-[13px] font-semibold">Estate composition</h2>
-      <p class="text-[10.5px] t3 mt-0.5">Where the synthetic inventory sits</p>
-    </div>
-    <div class="space-y-3.5">
-      {{ ui.hbar(inventory.by_environment, 'environment', 'n', 'var(--series-3)') }}
-      <div class="divider !my-4"></div>
-      <div class="grid grid-cols-2 gap-3 text-[11.5px]">
-        <div>
-          <div class="t3 text-[10px]">Tier-1 applications</div>
-          <div class="font-semibold text-[15px] tabular-nums"
-               data-count="{{ inventory.tier1_applications }}">0</div>
-        </div>
-        <div>
-          <div class="t3 text-[10px]">Internet-facing assets</div>
-          <div class="font-semibold text-[15px] tabular-nums"
-               data-count="{{ inventory.internet_facing_assets }}">0</div>
-        </div>
-        <div>
-          <div class="t3 text-[10px]">Software records</div>
-          <div class="font-semibold text-[15px] tabular-nums"
-               data-count="{{ inventory.software_records }}">0</div>
-        </div>
-        <div>
-          <div class="t3 text-[10px]">Unconfirmed verdicts</div>
-          <div class="font-semibold text-[15px] tabular-nums"
-               data-count="{{ summary.unknown_verdicts }}">0</div>
-        </div>
+      <div class="flex items-start gap-2.5">
+        <span class="dot-serious"></span>
+        <span><b class="tabular-nums">{{ posture.tier1_services_at_risk }}</b> revenue-critical
+          services are affected{% if posture.customer_facing_at_risk %}, of which
+          <b class="tabular-nums">{{ posture.customer_facing_at_risk }}</b> are customer-facing{% endif %}.</span>
       </div>
+      <div class="flex items-start gap-2.5">
+        <span class="dot-good"></span>
+        <span><b class="tabular-nums">{{ posture.fix_available }}</b> already have a vendor fix
+          published — these are <b>patching decisions, not investigations</b>.</span>
+      </div>
+      {% if posture.past_deadline %}
+      <div class="flex items-start gap-2.5">
+        <span class="dot-warning"></span>
+        <span><b class="tabular-nums">{{ posture.past_deadline }}</b> are already past the
+          deadline your policy sets.</span>
+      </div>
+      {% endif %}
     </div>
   </div>
 </section>
 
-<!-- ============ Top risks ============ -->
-<section class="card card-lit fade-up overflow-hidden">
-  <div class="px-5 py-4 flex items-baseline justify-between flex-wrap gap-3"
-       style="border-bottom: 1px solid var(--border)">
+<!-- ============ THE VALUE ARGUMENT ============ -->
+<section class="card card-lit p-6 fade-up">
+  {{ ui.chart_head(
+      'Why this list is different from a severity list',
+      'A standard vulnerability feed ranks by technical severity alone — it knows nothing about
+       your business. This shows the same vulnerabilities ranked both ways. Every line that moves
+       is work your team would otherwise have done in the wrong order.',
+      proof.candidate_count|default(0)|string + ' vulnerabilities compared') }}
+
+  {{ ui.value_proof(proof) }}
+
+  {% if proof.available and proof.moved_up %}
+  <div class="mt-5 pt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-[11.5px]"
+       style="border-top: 1px solid var(--border)">
     <div>
-      <h2 class="text-[13px] font-semibold">Top enterprise risks</h2>
-      <p class="text-[10.5px] t3 mt-0.5">
-        One row per CVE, ranked by the worst-affected asset. Blast radius is a
-        count over confirmed-affected findings only.
-      </p>
+      <div class="text-[21px] font-semibold tone-critical tabular-nums"
+           data-count="{{ proof.moved_up }}">0</div>
+      <div class="t2 mt-1">issues became <b>more urgent</b> once your estate was considered</div>
     </div>
-    <a href="/findings" class="btn !py-1.5 !text-[11px]">All findings →</a>
+    <div>
+      <div class="text-[21px] font-semibold tone-accent tabular-nums"
+           data-count="{{ proof.moved_down }}">0</div>
+      <div class="t2 mt-1">turned out to matter <b>less</b> than their score implied</div>
+    </div>
+    <div>
+      <div class="text-[21px] font-semibold tabular-nums">{{ proof.candidate_count }}</div>
+      <div class="t2 mt-1">vulnerabilities triaged automatically, in seconds</div>
+    </div>
+  </div>
+  {% endif %}
+</section>
+
+<!-- ============ WHO IS AFFECTED ============ -->
+<section class="grid grid-cols-1 xl:grid-cols-[1fr_1fr] gap-5">
+  <div class="card card-lit p-5 fade-up">
+    {{ ui.chart_head('Business services at risk',
+       'Which parts of the business are exposed, worst first. Named services, not hostnames.') }}
+    {% if posture.services %}
+      <div class="space-y-3.5">
+        {% for s in posture.services %}
+        <div class="flex items-center gap-3" data-tip="<b>{{ s.business_service }}</b><br>
+             Tier {{ s.tier }} · {{ s.issues }} issue{{ 's' if s.issues != 1 }} ·
+             {{ '{:,}'.format(s.assets) }} systems{% if s.exploited %}<br>
+             {{ s.exploited }} being actively exploited{% endif %}">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-baseline gap-2">
+              <span class="text-[12.5px] font-medium truncate">{{ s.business_service }}</span>
+              {% if s.tier == 1 %}<span class="chip !text-[9px] !py-0">Tier 1</span>{% endif %}
+              {% if s.customer_facing %}<span class="chip chip-exposed !text-[9px] !py-0">Customer-facing</span>{% endif %}
+            </div>
+            <div class="bar-track mt-1.5">
+              <div class="bar-fill" style="width: {{ s.worst_score }}%; background: {{ 'var(--critical)' if s.worst_score >= 80 else 'var(--serious)' if s.worst_score >= 60 else 'var(--warning)' }}"></div>
+            </div>
+          </div>
+          <div class="text-right shrink-0 w-[76px]">
+            <div class="text-[14px] font-semibold tabular-nums">{{ s.worst_score|round(0)|int }}</div>
+            <div class="text-[9.5px] t3">{{ '{:,}'.format(s.assets) }} systems</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-[11.5px] t3">No services above the reporting threshold.</p>
+    {% endif %}
+  </div>
+
+  <div class="card card-lit p-5 fade-up">
+    {{ ui.chart_head('How urgent is the backlog?',
+       'Everything open, grouped by how soon it needs attention.') }}
+    {{ ui.band_donut(summary.by_band, 'open issues') }}
+  </div>
+</section>
+
+<!-- ============ WHAT TO DO ============ -->
+<section class="card card-lit fade-up overflow-hidden">
+  <div class="px-6 py-5" style="border-bottom: 1px solid var(--border)">
+    {{ ui.chart_head('The five things to fix first',
+       'Ranked by a fixed formula combining how bad the flaw is, how likely it is to be used
+        against you, and how much it would cost your business. Click any row to see the arithmetic.') }}
   </div>
 
   {% if top_risks %}
@@ -115,86 +151,87 @@
     <table class="tbl">
       <thead>
         <tr>
-          <th style="min-width:150px">CVE</th>
-          <th style="min-width:150px">Score</th>
-          <th>Signals</th>
-          <th class="num">Assets</th>
-          <th class="num">Apps</th>
-          <th class="num">CVSS</th>
-          <th class="num">EPSS</th>
-          <th>Fix</th>
-          <th>Due</th>
+          <th style="min-width:52px">#</th>
+          <th style="min-width:190px">What is wrong</th>
+          <th style="min-width:150px">Urgency</th>
+          <th>Why it matters to you</th>
+          <th class="num">Systems</th>
+          <th>The fix</th>
+          <th>By when</th>
         </tr>
       </thead>
       <tbody>
         {% for row in top_risks %}
         <tr>
+          <td class="text-[15px] font-semibold t3 tabular-nums">{{ loop.index }}</td>
           <td>
-            <div class="mono text-[11.5px] font-medium">{{ row.cve_id }}</div>
-            <div class="t3 text-[10px] truncate max-w-[230px]" title="{{ row.cve_description }}">
-              {{ (row.cve_description or '')[:70] }}{% if (row.cve_description or '')|length > 70 %}…{% endif %}
-            </div>
+            <div class="text-[12px] font-medium">{{ row.product or row.cve_id }}</div>
+            <div class="mono text-[10px] t3">{{ row.cve_id }}</div>
           </td>
           <td>
             {{ ui.scorebar(row.score) }}
             <div class="mt-1.5">{{ ui.band_pill(row.score) }}</div>
           </td>
           <td>{{ ui.signal_chips(row) }}</td>
-          <td class="num tabular-nums">{{ row.asset_count }}</td>
-          <td class="num tabular-nums">{{ row.application_count }}</td>
-          <td class="num tabular-nums">{{ '%.1f'|format(row.cvss_base) if row.cvss_base is not none else '—' }}</td>
-          <td class="num tabular-nums">{{ '%.3f'|format(row.epss) if row.epss is not none else '—' }}</td>
-          <td class="mono text-[11px]">{{ row.fixed_version or '—' }}</td>
+          <td class="num tabular-nums">
+            <div class="font-semibold">{{ '{:,}'.format(row.asset_count) }}</div>
+            <div class="text-[9.5px] t3">{{ row.application_count }} app{{ 's' if row.application_count != 1 }}</div>
+          </td>
+          <td>
+            {% if row.fixed_version %}
+              <span class="chip chip-ok" data-tip="Upgrade to this version">
+                → {{ row.fixed_version }}</span>
+            {% else %}
+              <span class="chip" data-tip="No vendor fix published; mitigation required">no fix yet</span>
+            {% endif %}
+          </td>
           <td class="mono text-[11px] t2">{{ row.earliest_due_date or '—' }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-  {% else %}
-  <div class="p-8 text-center text-[12px] t3">
-    No affected findings have been scored yet.
+  <div class="px-6 py-3 flex items-center justify-between text-[10.5px] t3"
+       style="border-top: 1px solid var(--border)">
+    <span>Ranking is deterministic and reproducible — the AI explains it, but cannot change it.</span>
+    <a href="/findings" class="btn !py-1 !px-3 !text-[10.5px]">See all →</a>
   </div>
+  {% else %}
+  <div class="p-8 text-center text-[12px] t3">Nothing scored yet.</div>
   {% endif %}
 </section>
 
-<!-- ============ Feed freshness ============ -->
+<!-- ============ CONFIDENCE ============ -->
 <section class="card card-lit p-5 fade-up">
-  <div class="flex items-baseline justify-between mb-4">
-    <div>
-      <h2 class="text-[13px] font-semibold">Intelligence freshness</h2>
-      <p class="text-[10.5px] t3 mt-0.5">
-        Stale feeds are surfaced rather than silently trusted — the critic agent reads this too.
-      </p>
-    </div>
-  </div>
-
+  {{ ui.chart_head('How current is this?',
+     'Advice is only as good as the intelligence behind it. Stale sources are shown, not hidden —
+      the system flags its own limitations rather than presenting an incomplete picture as complete.') }}
   {% if freshness %}
   <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
     {% for feed in freshness %}
-    <div class="p-3 rounded-lg" style="background: var(--surface-2); border: 1px solid var(--border)">
+    {% set label = {'kev':'Exploited-in-wild catalogue','epss':'Exploitation forecasts',
+                    'nvd':'Vulnerability database','osv':'Package advisories',
+                    'attack':'Attacker techniques','knowledge':'Policy documents'} %}
+    <div class="p-3 rounded-lg" style="background: var(--surface-2); border: 1px solid var(--border)"
+         data-tip="<b>{{ label.get(feed.source, feed.source) }}</b><br>
+                   {{ feed.run_count }} update{{ 's' if feed.run_count != 1 }}{% if feed.failure_count %},
+                   {{ feed.failure_count }} failed{% endif %}">
       <div class="flex items-center gap-1.5 mb-1.5">
         <span class="w-1.5 h-1.5 rounded-full"
-              style="background: {{ 'var(--good)' if feed.last_success and not feed.failure_count else ('var(--warning)' if feed.last_success else 'var(--text-3)') }};
+              style="background: {{ 'var(--good)' if feed.last_success else 'var(--text-3)' }};
                      box-shadow: 0 0 7px currentColor"></span>
-        <span class="text-[11px] font-medium uppercase tracking-wide">{{ feed.source }}</span>
+        <span class="text-[10.5px] font-medium">{{ label.get(feed.source, feed.source) }}</span>
       </div>
       <div class="text-[10px] t2 mono">
-        {{ feed.last_success.strftime('%d %b %H:%M') if feed.last_success else 'never' }}
-      </div>
-      <div class="text-[9.5px] t3 mt-0.5">
-        {{ feed.run_count }} run{{ 's' if feed.run_count != 1 }}{% if feed.failure_count %},
-        {{ feed.failure_count }} failed{% endif %}
+        {{ feed.last_success.strftime('%d %b %H:%M') if feed.last_success else 'not loaded' }}
       </div>
     </div>
     {% endfor %}
   </div>
   {% else %}
-  <p class="text-[12px] t3">
-    No ingestion has run yet. Start with <code class="mono">vulnintel ingest kev epss</code> —
-    both are small and fast.
-  </p>
+  <p class="text-[12px] t3">No intelligence loaded yet.</p>
   {% endif %}
 </section>
 
+{% endif %}
 {% endblock %}
