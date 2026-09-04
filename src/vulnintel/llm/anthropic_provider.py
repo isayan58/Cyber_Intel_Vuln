@@ -37,6 +37,15 @@ _UNSUPPORTED_NUMERIC_KEYWORDS = frozenset(
 )
 
 
+# Model families that accept ``thinking`` and ``output_config.effort``.
+# Matched on prefix so dated snapshots (claude-opus-5-20260401) resolve too.
+_ADAPTIVE_THINKING_PREFIXES = ("claude-opus-", "claude-sonnet-", "claude-fable-", "claude-mythos-")
+
+
+def _supports_adaptive_thinking(model: str) -> bool:
+    return any(model.startswith(prefix) for prefix in _ADAPTIVE_THINKING_PREFIXES)
+
+
 def sanitise_schema(node: Any) -> Any:
     """Recursively drop schema keywords the API does not accept."""
     if isinstance(node, list):
@@ -176,9 +185,21 @@ class AnthropicProvider(LLMProvider):
             "max_tokens": max_tokens or settings.llm_max_tokens,
             "system": system_param,
             "messages": [{"role": "user", "content": prompt}],
-            "thinking": {"type": "adaptive"},
             "output_config": output_config,
         }
+
+        # Request shape follows the model, not the caller. Adaptive thinking and
+        # the effort control are frontier-model features; sending them to Haiku
+        # returns "adaptive thinking is not supported on this model" and the
+        # agent silently falls back to its non-model path. The fast tier is
+        # deliberately used for extraction and summarisation, which do not need
+        # either feature.
+        if _supports_adaptive_thinking(model):
+            kwargs["thinking"] = {"type": "adaptive"}
+        else:
+            output_config.pop("effort", None)
+            if not output_config:
+                kwargs.pop("output_config")
 
         started = time.perf_counter()
         try:
