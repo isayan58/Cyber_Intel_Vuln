@@ -133,6 +133,7 @@ class RunTracer:
                             "prompt_version": span.get("prompt_version"),
                             "tier": span.get("tier"),
                             "cache_read_tokens": span.get("cache_read_tokens"),
+                            "cache_creation_tokens": span.get("cache_creation_tokens"),
                         },
                         default=str,
                     ),

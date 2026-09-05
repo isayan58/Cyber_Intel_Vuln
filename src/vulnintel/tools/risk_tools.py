@@ -506,10 +506,16 @@ def run_cost_breakdown(run_id: str, db: Database | None = None) -> dict[str, Any
         tier = detail.get("tier")
         tin = int(span.get("input_tokens") or 0)
         tout = int(span.get("output_tokens") or 0)
+        # Cached input is not billed at the input rate: a read costs a tenth,
+        # and writing the cache costs a quarter more than an ordinary token.
+        # Charging both at face value overstates a cached run and hides
+        # whether caching is earning its keep.
+        cread = int(detail.get("cache_read_tokens") or 0)
+        cwrite = int(detail.get("cache_creation_tokens") or 0)
         cost = 0.0
         if tier in price:
             pi, po = price[tier]
-            cost = tin / 1e6 * pi + tout / 1e6 * po
+            cost = (tin + 0.1 * cread + 1.25 * cwrite) / 1e6 * pi + tout / 1e6 * po
             total += cost
         nodes.append(
             {
@@ -519,6 +525,8 @@ def run_cost_breakdown(run_id: str, db: Database | None = None) -> dict[str, Any
                 "colour": colour.get(tier, "var(--text-3)"),
                 "input_tokens": tin,
                 "output_tokens": tout,
+                "cache_read_tokens": cread,
+                "cache_creation_tokens": cwrite,
                 "latency_ms": span.get("latency_ms") or 0,
                 "tool_calls": len(detail.get("tool_calls") or []),
                 "cost": round(cost, 5),
@@ -533,4 +541,6 @@ def run_cost_breakdown(run_id: str, db: Database | None = None) -> dict[str, Any
         "total_cost": round(total, 4),
         "total_latency_ms": sum(n["latency_ms"] for n in nodes),
         "deterministic_nodes": [n["node"] for n in nodes if not n["tier"]],
+        "cache_read_tokens": sum(n["cache_read_tokens"] for n in nodes),
+        "cache_creation_tokens": sum(n["cache_creation_tokens"] for n in nodes),
     }

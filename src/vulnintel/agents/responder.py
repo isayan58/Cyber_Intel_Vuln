@@ -46,6 +46,7 @@ class ResponderAgent(Agent):
                 "tool_calls": [],
                 "started_at": datetime.now(UTC).replace(tzinfo=None),
                 "prompt_version": result.prompt_version,
+                **self._usage_fields(result),
             }
             return result
 

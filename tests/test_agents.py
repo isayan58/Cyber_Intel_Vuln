@@ -214,3 +214,34 @@ class TestEndToEndGraph:
         )
         nodes = {s["node"] for s in state["spans"]}
         assert "policy_rag" in nodes
+
+    def test_every_model_backed_node_reports_its_tokens(self, seeded_db, knowledge_db):
+        """A node that calls the model must record what it spent.
+
+        The cost panel sums per-node tokens, so a node that reports ``None``
+        is silently free: the bill is real but the figure shown next to the
+        answer excludes it. This caught the responder and the critic —
+        between them roughly a third of a run — reporting nothing at all.
+        """
+        from vulnintel.graph import run_investigation
+
+        state = run_investigation("What are our top security risks?", user_role="cto")
+
+        deterministic = {"replan", "join", "route"}
+        silent = [
+            span["node"]
+            for span in state["spans"]
+            if span.get("node") not in deterministic
+            and span.get("tier")
+            and span.get("input_tokens") is None
+        ]
+        assert not silent, f"model-backed nodes recorded no tokens: {silent}"
+
+    def test_the_responder_records_tokens(self, seeded_db, knowledge_db):
+        """The responder builds its span by hand, so it is the easiest to forget."""
+        from vulnintel.graph import run_investigation
+
+        state = run_investigation("What are our top security risks?", user_role="cto")
+        responder = next(s for s in state["spans"] if s["node"] == "responder")
+        assert responder.get("input_tokens"), "the responder wrote an answer but billed nothing"
+        assert responder.get("output_tokens")
