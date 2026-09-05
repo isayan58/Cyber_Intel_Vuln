@@ -141,7 +141,7 @@ class OsvPipeline(Pipeline):
             for eco, name, version in packages
         ]
         with FeedClient() as client:
-            response = client._client.post(  # noqa: SLF001 - single POST use-site
+            response = client._client.post(
                 OSV_QUERY_BATCH, json={"queries": queries}, timeout=60.0
             )
             response.raise_for_status()

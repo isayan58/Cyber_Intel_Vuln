@@ -78,7 +78,7 @@ class ResponderAgent(Agent):
                     limit=6000,
                 ),
             )
-        except Exception as exc:  # noqa: BLE001 - always return something usable
+        except Exception as exc:
             log.exception("responder failed; falling back to a deterministic rendering")
             result.errors.append(f"responder: {exc}")
             answer = render_deterministic(state)

@@ -58,7 +58,7 @@ class GenericVersion:
     _TOKEN = re.compile(r"(\d+|[A-Za-z]+)")
     _PRERELEASE = {"alpha": -5, "a": -5, "beta": -4, "b": -4, "rc": -3, "pre": -3, "dev": -6}
 
-    __slots__ = ("raw", "parts")
+    __slots__ = ("parts", "raw")
 
     def __init__(self, raw: str) -> None:
         self.raw = raw

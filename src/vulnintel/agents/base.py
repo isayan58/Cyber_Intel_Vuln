@@ -70,7 +70,7 @@ class Agent(abc.ABC):
 
         try:
             gathered = self.gather(state)
-        except Exception as exc:  # noqa: BLE001 - one agent failing must not kill the run
+        except Exception as exc:
             log.exception("%s: evidence gathering failed", self.name)
             result.errors.append(f"{self.name}: {exc}")
             gathered = {"error": str(exc)}
@@ -82,7 +82,7 @@ class Agent(abc.ABC):
             except LLMError as exc:
                 log.warning("%s: model interpretation failed: %s", self.name, exc)
                 result.errors.append(f"{self.name} interpretation: {exc}")
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log.exception("%s: model interpretation raised", self.name)
                 result.errors.append(f"{self.name} interpretation: {exc}")
 

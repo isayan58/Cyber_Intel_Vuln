@@ -276,7 +276,7 @@ def run_investigation(
     started = time.perf_counter()
     try:
         final = get_graph().invoke(state, config={"recursion_limit": recursion_limit})
-    except Exception as exc:  # noqa: BLE001 - a failed run must still be recorded
+    except Exception as exc:
         log.exception("investigation failed")
         tracer.finish(state, status="failed", error=str(exc), latency_ms=_ms(started))
         raise

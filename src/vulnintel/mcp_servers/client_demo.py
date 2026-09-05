@@ -38,26 +38,25 @@ def _env() -> dict[str, str]:
 async def probe(server_label: str, module: str, calls: list[tuple[str, dict[str, Any]]]):
     params = StdioServerParameters(command=sys.executable, args=["-m", module], env=_env())
 
-    async with stdio_client(params) as (read, write):
-        async with ClientSession(read, write) as session:
-            init = await session.initialize()
-            info = getattr(init, "server_info", None) or getattr(init, "serverInfo", None)
-            print(f"\n=== {server_label} ===")
-            print(f"connected to: {info.name} v{info.version}")
+    async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
+        init = await session.initialize()
+        info = getattr(init, "server_info", None) or getattr(init, "serverInfo", None)
+        print(f"\n=== {server_label} ===")
+        print(f"connected to: {info.name} v{info.version}")
 
-            listing = await session.list_tools()
-            print(f"advertises {len(listing.tools)} tools:")
-            for tool in listing.tools:
-                schema = getattr(tool, "input_schema", None) or getattr(tool, "inputSchema", None)
-                required = (schema or {}).get("required", [])
-                first_line = (tool.description or "").strip().splitlines()[0]
-                print(f"  - {tool.name}({', '.join(required)}) — {first_line}")
+        listing = await session.list_tools()
+        print(f"advertises {len(listing.tools)} tools:")
+        for tool in listing.tools:
+            schema = getattr(tool, "input_schema", None) or getattr(tool, "inputSchema", None)
+            required = (schema or {}).get("required", [])
+            first_line = (tool.description or "").strip().splitlines()[0]
+            print(f"  - {tool.name}({', '.join(required)}) — {first_line}")
 
-            for tool_name, arguments in calls:
-                result = await session.call_tool(tool_name, arguments)
-                payload = _payload(result)
-                print(f"\n  call {tool_name}({json.dumps(arguments)}) ->")
-                print("   ", _summarise(payload))
+        for tool_name, arguments in calls:
+            result = await session.call_tool(tool_name, arguments)
+            payload = _payload(result)
+            print(f"\n  call {tool_name}({json.dumps(arguments)}) ->")
+            print("   ", _summarise(payload))
 
 
 def _payload(result: Any) -> Any:

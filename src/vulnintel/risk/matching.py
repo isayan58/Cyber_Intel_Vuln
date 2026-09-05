@@ -411,7 +411,6 @@ def _collapse(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _combine(results: list) -> Any:
     """Any affected range wins; otherwise unknown beats not-affected."""
-    from vulnintel.risk.versions import RangeResult
 
     if not results:
         return RangeResult(Verdict.NOT_AFFECTED, "no candidate ranges")

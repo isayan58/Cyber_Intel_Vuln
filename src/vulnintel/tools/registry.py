@@ -362,7 +362,7 @@ class ToolBox:
         try:
             result = spec.handler(**arguments)
             return result
-        except Exception as exc:  # noqa: BLE001 - recorded then re-raised
+        except Exception as exc:
             status, error = "error", str(exc)
             raise
         finally:

@@ -494,7 +494,7 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("\ninterrupted", file=sys.stderr)
         return 130
-    except Exception as exc:  # noqa: BLE001 - top-level CLI boundary
+    except Exception as exc:
         log.debug("command failed", exc_info=True)
         print(f"\n\033[31merror:\033[0m {exc}", file=sys.stderr)
         return 1

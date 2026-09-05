@@ -22,11 +22,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from docx import Document  # noqa: E402
-from docx.enum.table import WD_TABLE_ALIGNMENT  # noqa: E402
-from docx.oxml import OxmlElement  # noqa: E402
-from docx.oxml.ns import qn  # noqa: E402
-from docx.shared import Inches, Pt, RGBColor  # noqa: E402
+from docx import Document
+from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Inches, Pt, RGBColor
 
 OUTPUT = REPO_ROOT / "docs" / "generated" / "VulnIntel_Optimisation_Report.docx"
 

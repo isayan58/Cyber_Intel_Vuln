@@ -16,7 +16,6 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from vulnintel.config import get_settings
 from vulnintel.llm import build_provider, get_provider, set_provider
 from vulnintel.logging_setup import get_logger
 

@@ -125,7 +125,7 @@ def _from_schema(
         return _FIELD_DEFAULTS[field_name]
     if "const" in schema:
         return schema["const"]
-    if "enum" in schema and schema["enum"]:
+    if schema.get("enum"):
         options = schema["enum"]
         return options[seed % len(options)]
     if "default" in schema:
