@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from typing import Any
 
 from vulnintel.llm.base import LLMProvider, LLMResponse, Usage
@@ -64,9 +65,61 @@ class MockProvider(LLMProvider):
         seed = int(_digest(system, prompt)[:8], 16)
         value = _from_schema(schema, seed=seed, prompt=prompt)
         text = json.dumps(value)
-        return LLMResponse(
-            text=text, usage=Usage(120, 64), model=self.model, structured=value
-        )
+        return LLMResponse(text=text, usage=Usage(120, 64), model=self.model, structured=value)
+
+
+_INTENT_HINTS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    # Most specific first: the rendered prompt carries the question plus
+    # surrounding context, so loose keywords collide with each other.
+    ("cve_investigation", ("cve-", "ghsa-", "are we affected", "blast radius")),
+    ("patch_queue", ("can patch only", "patch only", "scheduled first", "capacity")),
+    ("executive_brief", ("cto", "executive", "board", "most concerned")),
+    ("application_assessment", ("exposure of", "assess the security")),
+    ("policy_question", ("what does our policy", "policy require", "sla for")),
+)
+
+_MODE_HINTS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("executive", ("user role: cto", "user role: ciso", "user role: executive")),
+    ("application_owner", ("user role: application_owner", "user role: app_owner")),
+)
+
+
+def _guess_intent(prompt: str) -> str:
+    """Keyword intent, mirroring the supervisor's own fallback heuristic."""
+    text = prompt.lower()
+    for intent, hints in _INTENT_HINTS:
+        if any(hint in text for hint in hints):
+            return intent
+    return "general"
+
+
+def _guess_mode(prompt: str) -> str:
+    """Response mode from the stated role, as a real planner would."""
+    text = prompt.lower()
+    for mode, hints in _MODE_HINTS:
+        if any(hint in text for hint in hints):
+            return mode
+    return "analyst"
+
+
+_CVE_RE = re.compile(r"\bCVE-\d{4}-\d{4,7}\b", re.IGNORECASE)
+_GHSA_RE = re.compile(r"\bGHSA(?:-[23456789cfghjmpqrvwx]{4}){3}\b", re.IGNORECASE)
+
+
+def _extract(pattern: re.Pattern[str], prompt: str) -> list[str]:
+    """Entity extraction the stand-in can actually do.
+
+    Without this the mock returns no entities at all, so every question falls
+    through to the unscoped ranking branch — and "are we affected by
+    CVE-1999-00000?" comes back with the global top five, which is precisely
+    the fabrication the suite is meant to catch.
+    """
+    seen: list[str] = []
+    for match in pattern.findall(prompt):
+        value = match.upper()
+        if value not in seen:
+            seen.append(value)
+    return seen[:10]
 
 
 def _digest(*parts: str) -> str:
@@ -101,12 +154,15 @@ _FIELD_DEFAULTS: dict[str, Any] = {
     "retained_mappings": [],
     "staleness_warnings": [],
     "result_limit": 5,
-    "cve_ids": [],
-    "advisory_ids": [],
     "application_names": [],
     "asset_hostnames": [],
     "products": [],
     "missing_data": [],
+    # A stand-in cannot cite a real chunk, so it claims no obligations rather
+    # than inventing one that the citation check then correctly discards —
+    # which would leave the plan asserting policy with no evidence behind it.
+    "obligations": [],
+    "policy_obligations": [],
 }
 
 
@@ -121,11 +177,22 @@ def _from_schema(
     if depth > 6:
         return None
 
+    if field_name == "response_mode":
+        return _guess_mode(prompt)
+    if field_name == "cve_ids":
+        return _extract(_CVE_RE, prompt)
+    if field_name == "advisory_ids":
+        return _extract(_GHSA_RE, prompt)
+    if field_name == "intent":
+        # Derived from the prompt rather than picked from the enum by hash.
+        # A stand-in that routes "we can only patch 20 today" to an asset
+        # lookup is not exercising the workflow the question describes.
+        return _guess_intent(prompt)
     if field_name in _FIELD_DEFAULTS:
         return _FIELD_DEFAULTS[field_name]
     if "const" in schema:
         return schema["const"]
-    if "enum" in schema and schema["enum"]:
+    if schema.get("enum"):
         options = schema["enum"]
         return options[seed % len(options)]
     if "default" in schema:
@@ -146,9 +213,7 @@ def _from_schema(
     if schema_type == "array":
         item_schema = schema.get("items", {"type": "string"})
         count = max(int(schema.get("minItems", 1)), 1)
-        return [
-            _from_schema(item_schema, seed + i, prompt, depth + 1) for i in range(count)
-        ]
+        return [_from_schema(item_schema, seed + i, prompt, depth + 1) for i in range(count)]
     if schema_type == "integer":
         return int(schema.get("minimum", 1))
     if schema_type == "number":

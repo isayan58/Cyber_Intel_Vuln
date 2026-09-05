@@ -7,6 +7,7 @@ here computes a score; ``explain_score`` reformats stored components, and
 
 from __future__ import annotations
 
+import contextlib
 import json
 from typing import Any
 
@@ -235,7 +236,9 @@ def portfolio_summary(db: Database | None = None) -> dict[str, Any]:
         "open_findings": conn.scalar(f"SELECT count(*) {base}"),
         "distinct_cves": conn.scalar(f"SELECT count(DISTINCT cve_id) {base}"),
         "kev_findings": conn.scalar(f"SELECT count(*) {base} AND kev_listed = TRUE"),
-        "internet_facing_findings": conn.scalar(f"SELECT count(*) {base} AND internet_facing = TRUE"),
+        "internet_facing_findings": conn.scalar(
+            f"SELECT count(*) {base} AND internet_facing = TRUE"
+        ),
         "sla_breaches": conn.scalar(f"SELECT count(*) {base} AND sla_breached = TRUE"),
         "unknown_verdicts": conn.scalar("SELECT count(*) FROM v_unknown_verdicts"),
         "max_score": conn.scalar(f"SELECT max(score) {base}"),
@@ -263,10 +266,9 @@ def _decode(value: Any) -> Any:
     if value is None:
         return None
     if isinstance(value, str):
-        try:
+        with contextlib.suppress(json.JSONDecodeError):
             return json.loads(value)
-        except json.JSONDecodeError:
-            return value
+        return value
     return value
 
 
@@ -310,20 +312,26 @@ def executive_posture(db: Database | None = None) -> dict[str, Any]:
         """
     )
     return {
-        "act_within_3_days": conn.scalar(f"SELECT count(DISTINCT cve_id) {base} AND sla_days <= 3") or 0,
-        "act_within_7_days": conn.scalar(f"SELECT count(DISTINCT cve_id) {base} AND sla_days <= 7") or 0,
-        "actively_exploited": conn.scalar(f"SELECT count(DISTINCT cve_id) {base} AND kev_listed") or 0,
+        "act_within_3_days": conn.scalar(f"SELECT count(DISTINCT cve_id) {base} AND sla_days <= 3")
+        or 0,
+        "act_within_7_days": conn.scalar(f"SELECT count(DISTINCT cve_id) {base} AND sla_days <= 7")
+        or 0,
+        "actively_exploited": conn.scalar(f"SELECT count(DISTINCT cve_id) {base} AND kev_listed")
+        or 0,
         "customer_facing_at_risk": conn.scalar(
             f"SELECT count(DISTINCT business_service) {base} "
             "AND external_customer_facing = TRUE AND score >= 60"
-        ) or 0,
+        )
+        or 0,
         "tier1_services_at_risk": conn.scalar(
             f"SELECT count(DISTINCT business_service) {base} AND tier = 1 AND score >= 60"
-        ) or 0,
+        )
+        or 0,
         "past_deadline": conn.scalar(f"SELECT count(DISTINCT cve_id) {base} AND sla_breached") or 0,
         "fix_available": conn.scalar(
             f"SELECT count(DISTINCT cve_id) {base} AND fixed_version IS NOT NULL AND sla_days <= 7"
-        ) or 0,
+        )
+        or 0,
         "urgent": urgent,
         "services": services,
     }
@@ -368,8 +376,11 @@ def value_proof(limit: int = 8, db: Database | None = None) -> dict[str, Any]:
     # honestly rather than implying a CVSS comparison that did not happen.
     has_cvss = any(r["cvss"] is not None for r in rows)
     baseline = "CVSS severity" if has_cvss else "EPSS exploitation probability"
-    key = (lambda r: (-(r["cvss"] or 0), -(r["epss"] or 0))) if has_cvss \
+    key = (
+        (lambda r: (-(r["cvss"] or 0), -(r["epss"] or 0)))
+        if has_cvss
         else (lambda r: -(r["epss"] or 0))
+    )
 
     by_cvss = sorted(rows, key=key)
     by_score = sorted(rows, key=lambda r: -(r["score"] or 0))
@@ -447,10 +458,24 @@ def score_distribution(buckets: int = 10, db: Database | None = None) -> list[di
     out = []
     for b in range(buckets):
         low = b * 10
-        colour = ("var(--critical)" if low >= 80 else "var(--serious)" if low >= 60
-                  else "var(--warning)" if low >= 40 else "var(--series-1)")
-        out.append({"label": f"{low}", "n": counts.get(b, 0), "colour": colour,
-                    "low": low, "high": low + 10})
+        colour = (
+            "var(--critical)"
+            if low >= 80
+            else "var(--serious)"
+            if low >= 60
+            else "var(--warning)"
+            if low >= 40
+            else "var(--series-1)"
+        )
+        out.append(
+            {
+                "label": f"{low}",
+                "n": counts.get(b, 0),
+                "colour": colour,
+                "low": low,
+                "high": low + 10,
+            }
+        )
     return out
 
 
@@ -466,37 +491,47 @@ def run_cost_breakdown(run_id: str, db: Database | None = None) -> dict[str, Any
     conn = _db(db)
     price = {"deep": (5.0, 25.0), "mid": (2.0, 10.0), "fast": (1.0, 5.0)}
     tier_model = {"deep": "Opus 5", "mid": "Sonnet 5", "fast": "Haiku 4.5"}
-    colour = {"deep": "var(--series-2)", "mid": "var(--series-1)",
-              "fast": "var(--series-3)", None: "var(--text-3)"}
+    colour = {
+        "deep": "var(--series-2)",
+        "mid": "var(--series-1)",
+        "fast": "var(--series-3)",
+        None: "var(--text-3)",
+    }
 
     nodes, total = [], 0.0
-    for span in conn.query(
-        "SELECT * FROM agent_span WHERE run_id = ? ORDER BY seq", [run_id]
-    ):
+    for span in conn.query("SELECT * FROM agent_span WHERE run_id = ? ORDER BY seq", [run_id]):
         detail = {}
-        try:
+        with contextlib.suppress(ValueError, TypeError):
             detail = _json.loads(span.get("detail") or "{}")
-        except (ValueError, TypeError):
-            pass
         tier = detail.get("tier")
         tin = int(span.get("input_tokens") or 0)
         tout = int(span.get("output_tokens") or 0)
+        # Cached input is not billed at the input rate: a read costs a tenth,
+        # and writing the cache costs a quarter more than an ordinary token.
+        # Charging both at face value overstates a cached run and hides
+        # whether caching is earning its keep.
+        cread = int(detail.get("cache_read_tokens") or 0)
+        cwrite = int(detail.get("cache_creation_tokens") or 0)
         cost = 0.0
         if tier in price:
             pi, po = price[tier]
-            cost = tin / 1e6 * pi + tout / 1e6 * po
+            cost = (tin + 0.1 * cread + 1.25 * cwrite) / 1e6 * pi + tout / 1e6 * po
             total += cost
-        nodes.append({
-            "node": span["node"],
-            "tier": tier,
-            "model": tier_model.get(tier, "deterministic"),
-            "colour": colour.get(tier, "var(--text-3)"),
-            "input_tokens": tin,
-            "output_tokens": tout,
-            "latency_ms": span.get("latency_ms") or 0,
-            "tool_calls": len(detail.get("tool_calls") or []),
-            "cost": round(cost, 5),
-        })
+        nodes.append(
+            {
+                "node": span["node"],
+                "tier": tier,
+                "model": tier_model.get(tier, "deterministic"),
+                "colour": colour.get(tier, "var(--text-3)"),
+                "input_tokens": tin,
+                "output_tokens": tout,
+                "cache_read_tokens": cread,
+                "cache_creation_tokens": cwrite,
+                "latency_ms": span.get("latency_ms") or 0,
+                "tool_calls": len(detail.get("tool_calls") or []),
+                "cost": round(cost, 5),
+            }
+        )
 
     for n in nodes:
         n["cost_share"] = round(100 * n["cost"] / total, 1) if total else 0.0
@@ -506,4 +541,6 @@ def run_cost_breakdown(run_id: str, db: Database | None = None) -> dict[str, Any
         "total_cost": round(total, 4),
         "total_latency_ms": sum(n["latency_ms"] for n in nodes),
         "deterministic_nodes": [n["node"] for n in nodes if not n["tier"]],
+        "cache_read_tokens": sum(n["cache_read_tokens"] for n in nodes),
+        "cache_creation_tokens": sum(n["cache_creation_tokens"] for n in nodes),
     }

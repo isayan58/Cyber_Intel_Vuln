@@ -131,7 +131,7 @@ class SyntheticGenerator:
     def _applications(self) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
         for index in range(self.application_count):
-            service, tier, criticality, customer_facing = BUSINESS_SERVICES[
+            service, tier, _criticality, customer_facing = BUSINESS_SERVICES[
                 index % len(BUSINESS_SERVICES)
             ]
             suffix = index // len(BUSINESS_SERVICES)

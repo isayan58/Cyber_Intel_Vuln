@@ -26,9 +26,9 @@ class TestCompare:
             ("1.0.0", "1.0.1", -1),
             ("1.0.1", "1.0.0", 1),
             ("1.0.0", "1.0.0", 0),
-            ("2.0", "10.0", -1),          # numeric, not lexical
+            ("2.0", "10.0", -1),  # numeric, not lexical
             ("1.9.0", "1.10.0", -1),
-            ("1.0", "1.0.0", 0),          # trailing zeros are equal
+            ("1.0", "1.0.0", 0),  # trailing zeros are equal
             ("1.0.0", "1.0.0.0", 0),
         ],
     )
@@ -38,7 +38,7 @@ class TestCompare:
     @pytest.mark.parametrize(
         ("left", "right", "expected"),
         [
-            ("1.0.0", "1.0.0-beta", 1),      # release beats prerelease
+            ("1.0.0", "1.0.0-beta", 1),  # release beats prerelease
             ("1.0.0-alpha", "1.0.0-beta", -1),
             ("1.0.0-rc.1", "1.0.0", -1),
             ("2.0.0-rc.1", "1.9.9", 1),
@@ -86,26 +86,38 @@ class TestOsvRange:
         assert result.fixed_version == "4.2.11"
 
     def test_at_fix_is_not_affected(self):
-        assert in_osv_range("4.2.11", introduced="0", fixed="4.2.11",
-                            ecosystem="PyPI").verdict is Verdict.NOT_AFFECTED
+        assert (
+            in_osv_range("4.2.11", introduced="0", fixed="4.2.11", ecosystem="PyPI").verdict
+            is Verdict.NOT_AFFECTED
+        )
 
     def test_above_fix_is_not_affected(self):
-        assert in_osv_range("5.0.2", introduced="0", fixed="4.2.11",
-                            ecosystem="PyPI").verdict is Verdict.NOT_AFFECTED
+        assert (
+            in_osv_range("5.0.2", introduced="0", fixed="4.2.11", ecosystem="PyPI").verdict
+            is Verdict.NOT_AFFECTED
+        )
 
     def test_below_introduced_is_not_affected(self):
-        assert in_osv_range("3.2.0", introduced="4.0.0", fixed="4.2.11",
-                            ecosystem="PyPI").verdict is Verdict.NOT_AFFECTED
+        assert (
+            in_osv_range("3.2.0", introduced="4.0.0", fixed="4.2.11", ecosystem="PyPI").verdict
+            is Verdict.NOT_AFFECTED
+        )
 
     def test_last_affected_is_inclusive(self):
-        assert in_osv_range("1.5.0", introduced="1.0.0",
-                            last_affected="1.5.0").verdict is Verdict.AFFECTED
-        assert in_osv_range("1.5.1", introduced="1.0.0",
-                            last_affected="1.5.0").verdict is Verdict.NOT_AFFECTED
+        assert (
+            in_osv_range("1.5.0", introduced="1.0.0", last_affected="1.5.0").verdict
+            is Verdict.AFFECTED
+        )
+        assert (
+            in_osv_range("1.5.1", introduced="1.0.0", last_affected="1.5.0").verdict
+            is Verdict.NOT_AFFECTED
+        )
 
     def test_explicit_version_list(self):
         assert in_osv_range("1.2.3", explicit_versions="1.2.3,1.2.4").verdict is Verdict.AFFECTED
-        assert in_osv_range("1.2.5", explicit_versions="1.2.3,1.2.4").verdict is Verdict.NOT_AFFECTED
+        assert (
+            in_osv_range("1.2.5", explicit_versions="1.2.3,1.2.4").verdict is Verdict.NOT_AFFECTED
+        )
 
     def test_unparseable_version_is_unknown_never_affected(self):
         result = in_osv_range("latest", introduced="0", fixed="1.0.0")
@@ -129,8 +141,9 @@ class TestCpeRange:
         assert in_cpe_range("1.24.0", version_end_excluding="1.26.1").verdict is Verdict.AFFECTED
 
     def test_at_exclusive_upper_bound(self):
-        assert in_cpe_range("1.26.1",
-                            version_end_excluding="1.26.1").verdict is Verdict.NOT_AFFECTED
+        assert (
+            in_cpe_range("1.26.1", version_end_excluding="1.26.1").verdict is Verdict.NOT_AFFECTED
+        )
 
     def test_inclusive_upper_bound(self):
         assert in_cpe_range("2.4.59", version_end_including="2.4.59").verdict is Verdict.AFFECTED
@@ -142,8 +155,12 @@ class TestCpeRange:
         assert result.verdict is Verdict.NOT_AFFECTED
 
     def test_exclusive_lower_bound(self):
-        assert in_cpe_range("1.22.0", version_start_excluding="1.22.0",
-                            version_end_excluding="2.0").verdict is Verdict.NOT_AFFECTED
+        assert (
+            in_cpe_range(
+                "1.22.0", version_start_excluding="1.22.0", version_end_excluding="2.0"
+            ).verdict
+            is Verdict.NOT_AFFECTED
+        )
 
     def test_exact_pinned_version(self):
         assert in_cpe_range("9.6p1", cpe_version="9.6p1").verdict is Verdict.AFFECTED
@@ -178,12 +195,26 @@ class TestCollapseIdentity:
 
     def _rows(self):
         return [
-            {"asset_id": "A1", "cve_id": "CVE-2021-23337", "advisory_id": "GHSA-35jh-r3h4-6jhm",
-             "match_path": "purl", "match_confidence": 1.0, "scanner_confidence": 0.95,
-             "version_verdict": "affected", "fixed_version": "4.17.21"},
-            {"asset_id": "A1", "cve_id": "CVE-2021-23337", "advisory_id": "GHSA-r5fr-rjxr-66jc",
-             "match_path": "purl", "match_confidence": 1.0, "scanner_confidence": 0.95,
-             "version_verdict": "affected", "fixed_version": "4.18.0"},
+            {
+                "asset_id": "A1",
+                "cve_id": "CVE-2021-23337",
+                "advisory_id": "GHSA-35jh-r3h4-6jhm",
+                "match_path": "purl",
+                "match_confidence": 1.0,
+                "scanner_confidence": 0.95,
+                "version_verdict": "affected",
+                "fixed_version": "4.17.21",
+            },
+            {
+                "asset_id": "A1",
+                "cve_id": "CVE-2021-23337",
+                "advisory_id": "GHSA-r5fr-rjxr-66jc",
+                "match_path": "purl",
+                "match_confidence": 1.0,
+                "scanner_confidence": 0.95,
+                "version_verdict": "affected",
+                "fixed_version": "4.18.0",
+            },
         ]
 
     def test_distinct_advisories_are_not_merged(self):
@@ -196,8 +227,7 @@ class TestCollapseIdentity:
 
         rows = [
             dict(self._rows()[0]),
-            dict(self._rows()[0], match_path="cpe", match_confidence=0.6,
-                 fixed_version="4.17.21"),
+            dict(self._rows()[0], match_path="cpe", match_confidence=0.6, fixed_version="4.17.21"),
         ]
         collapsed = _collapse(rows)
         assert len(collapsed) == 1
@@ -276,3 +306,22 @@ class TestVendorResolution:
         from vulnintel.risk.matching import _resolve_vendor
 
         assert _resolve_vendor("ghost", {}) == (None, 0.0, False)
+
+
+class TestAmbiguousVendorDowngrade:
+    def test_ambiguous_vendor_never_asserts_affected(self):
+        """A match against an unresolvable vendor is unconfirmed, not affected.
+
+        Guards a regression that slipped through once already: the flag was
+        computed but the downgrade was not applied, so ambiguous matches were
+        reported as confirmed.
+        """
+        import inspect
+
+        from vulnintel.risk import matching
+
+        source = inspect.getsource(matching.FindingMatcher._match_cpe)
+        assert "ambiguous_vendor and verdict.verdict is Verdict.AFFECTED" in source, (
+            "the ambiguous-vendor downgrade is missing from the CPE match path"
+        )
+        assert "Verdict.UNKNOWN" in source

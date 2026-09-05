@@ -17,7 +17,7 @@ os.environ.setdefault("VULNINTEL_EMBEDDING_PROVIDER", "hash")
 
 @pytest.fixture
 def settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    from vulnintel.config import Settings, get_settings, reload_settings
+    from vulnintel.config import get_settings, reload_settings
 
     monkeypatch.setenv("VULNINTEL_DUCKDB_PATH", str(tmp_path / "test.duckdb"))
     monkeypatch.setenv("VULNINTEL_BRONZE_ROOT", str(tmp_path / "bronze"))

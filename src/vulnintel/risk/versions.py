@@ -58,7 +58,7 @@ class GenericVersion:
     _TOKEN = re.compile(r"(\d+|[A-Za-z]+)")
     _PRERELEASE = {"alpha": -5, "a": -5, "beta": -4, "b": -4, "rc": -3, "pre": -3, "dev": -6}
 
-    __slots__ = ("raw", "parts")
+    __slots__ = ("parts", "raw")
 
     def __init__(self, raw: str) -> None:
         self.raw = raw
@@ -221,12 +221,11 @@ def in_cpe_range(
             equal = compare(version, cpe_version, ecosystem) == 0
             return RangeResult(
                 Verdict.AFFECTED if equal else Verdict.NOT_AFFECTED,
-                f"exact CPE version match {cpe_version}" if equal
+                f"exact CPE version match {cpe_version}"
+                if equal
                 else f"installed {version} != pinned {cpe_version}",
             )
-        return RangeResult(
-            Verdict.UNKNOWN, "CPE match has a wildcard version and no range bounds"
-        )
+        return RangeResult(Verdict.UNKNOWN, "CPE match has a wildcard version and no range bounds")
 
     reasons: list[str] = []
 
@@ -310,9 +309,7 @@ def in_osv_range(
         if not is_parseable(last_affected):
             return RangeResult(Verdict.UNKNOWN, f"last_affected {last_affected!r} not comparable")
         if compare(version, last_affected, ecosystem) > 0:
-            return RangeResult(
-                Verdict.NOT_AFFECTED, f"{version} > last_affected {last_affected}"
-            )
+            return RangeResult(Verdict.NOT_AFFECTED, f"{version} > last_affected {last_affected}")
         reasons.append(f"<= {last_affected}")
 
     if not reasons:

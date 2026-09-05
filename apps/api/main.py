@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Form, Query, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -48,6 +49,11 @@ app = FastAPI(
     version=__version__,
     description="Enterprise vulnerability and cyber-risk intelligence platform",
 )
+
+from api.security import SecurityMiddleware, warn_if_unprotected  # noqa: E402
+
+app.add_middleware(SecurityMiddleware)
+warn_if_unprotected()
 
 STATIC_DIR = BASE_DIR / "static"
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
@@ -137,8 +143,7 @@ def ask_page(request: Request):
                     "cto",
                 ),
                 (
-                    "We can patch only 20 findings today. Which ones should be "
-                    "scheduled first?",
+                    "We can patch only 20 findings today. Which ones should be scheduled first?",
                     "analyst",
                 ),
                 (
@@ -191,9 +196,7 @@ def findings_page(
 @app.get("/findings/{finding_id}", response_class=HTMLResponse)
 def finding_detail(request: Request, finding_id: int):
     explanation = risk_tools.explain_score(finding_id)
-    row = get_db().query_one(
-        "SELECT * FROM v_finding_enriched WHERE finding_id = ?", [finding_id]
-    )
+    row = get_db().query_one("SELECT * FROM v_finding_enriched WHERE finding_id = ?", [finding_id])
     return templates.TemplateResponse(
         request,
         "finding_detail.html",
@@ -226,8 +229,7 @@ def trace_detail(request: Request, run_id: str):
     return templates.TemplateResponse(
         request,
         "trace_detail.html",
-        {
-            "page": "traces", "run": run or {}, "run_id": run_id},
+        {"page": "traces", "run": run or {}, "run_id": run_id},
     )
 
 
@@ -288,8 +290,7 @@ def reload_prompts(request: Request):
     return templates.TemplateResponse(
         request,
         "fragments/prompt_table.html",
-        {
-            "prompts": registry.describe(), "reloaded": True},
+        {"prompts": registry.describe(), "reloaded": True},
     )
 
 
@@ -298,8 +299,7 @@ def score_fragment(request: Request, finding_id: int):
     return templates.TemplateResponse(
         request,
         "fragments/score_breakdown.html",
-        {
-            "explanation": risk_tools.explain_score(finding_id)},
+        {"explanation": risk_tools.explain_score(finding_id)},
     )
 
 
@@ -308,8 +308,7 @@ def citation_fragment(request: Request, chunk_id: str):
     return templates.TemplateResponse(
         request,
         "fragments/citation.html",
-        {
-            "chunk": knowledge_tools.retrieve_chunk(chunk_id)},
+        {"chunk": knowledge_tools.retrieve_chunk(chunk_id)},
     )
 
 
@@ -395,8 +394,12 @@ async def ask_stream(question: str = Form(...), user_role: str = Form("analyst")
                     "node": node,
                     "summary": _node_summary(node, payload or {}),
                     "spans": [
-                        {"node": s.get("node"), "latency_ms": s.get("latency_ms"),
-                         "status": s.get("status"), "tool_calls": s.get("tool_calls", [])}
+                        {
+                            "node": s.get("node"),
+                            "latency_ms": s.get("latency_ms"),
+                            "status": s.get("status"),
+                            "tool_calls": s.get("tool_calls", []),
+                        }
                         for s in (payload or {}).get("spans", [])
                     ],
                 },
@@ -431,7 +434,7 @@ def _node_summary(node: str, payload: dict[str, Any]) -> str:
         return "final answer composed"
 
     evidence = payload.get("evidence") or {}
-    for agent, data in evidence.items():
+    for agent in evidence:
         calls = len((payload.get("spans") or [{}])[0].get("tool_calls", []))
         return f"{agent}: {calls} tool call(s)"
     return ""
@@ -460,20 +463,29 @@ def health():
 @app.post("/api/ask")
 def ask(question: str = Form(...), user_role: str = Form("analyst")):
     state = run_investigation(question, user_role)
+    # jsonable_encoder, not a bare JSONResponse: a scored finding carries
+    # kev_date_added and sla_due_date as date objects, and json.dumps has no
+    # handler for a date. Every other endpoint returns a plain dict and gets
+    # FastAPI's encoding for free; this one constructs the response itself and
+    # so opted out of it. The investigation has already run and been billed by
+    # the time this executes, so a serialisation slip here throws away a
+    # paid-for answer and reports it to the caller as a 500.
     return JSONResponse(
-        {
-            "run_id": state.get("run_id"),
-            "answer": state.get("final_answer"),
-            "intent": state.get("intent"),
-            "response_mode": state.get("response_mode"),
-            "agents_run": state.get("required_agents"),
-            "replan_count": state.get("replan_count"),
-            "critique": state.get("critique"),
-            "citations": state.get("citations"),
-            "findings": state.get("scored_findings", [])[:20],
-            "latency_ms": state.get("latency_ms"),
-            "prompt_versions": state.get("prompt_versions"),
-        }
+        jsonable_encoder(
+            {
+                "run_id": state.get("run_id"),
+                "answer": state.get("final_answer"),
+                "intent": state.get("intent"),
+                "response_mode": state.get("response_mode"),
+                "agents_run": state.get("required_agents"),
+                "replan_count": state.get("replan_count"),
+                "critique": state.get("critique"),
+                "citations": state.get("citations"),
+                "findings": state.get("scored_findings", [])[:20],
+                "latency_ms": state.get("latency_ms"),
+                "prompt_versions": state.get("prompt_versions"),
+            }
+        )
     )
 
 

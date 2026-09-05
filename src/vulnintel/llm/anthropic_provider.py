@@ -167,7 +167,17 @@ class AnthropicProvider(LLMProvider):
         if schema is not None:
             output_config["format"] = {"type": "json_schema", "schema": sanitise_schema(schema)}
 
-        # A cached system block keeps the stable prefix out of per-call cost.
+        # A cached system block keeps the stable prefix out of per-call cost,
+        # but only once the prefix clears the API's minimum cacheable size:
+        # 1024 tokens, or 2048 on Haiku. Every shipped system prompt is
+        # 400-855 tokens, so measured over a live five-scenario suite this
+        # earns 3,789 cached tokens against 152,363 uncached — 2.4%, all of it
+        # on risk_remediation, whose output schema pushes its prefix over the
+        # Sonnet threshold. The fast-tier nodes never reach 2048 and cache
+        # nothing. Left in place because it is free and starts paying if a
+        # prompt grows, but it is not the optimisation it looks like: input
+        # cost here is dominated by the per-question evidence payload in the
+        # user message, which no two runs share.
         system_param: Any = (
             [{"type": "text", "text": system, "cache_control": {"type": "ephemeral", "ttl": "1h"}}]
             if cache_system

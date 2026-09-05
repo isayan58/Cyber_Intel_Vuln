@@ -1,0 +1,155 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONPATH: src:apps
+  # No network and no API key in CI: the mock provider makes the whole graph,
+  # the MCP servers and the evaluation suites runnable offline and deterministic.
+  VULNINTEL_LLM_PROVIDER: mock
+  VULNINTEL_EMBEDDING_PROVIDER: hash
+
+jobs:
+  quality:
+    name: Lint and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,docs]"
+
+      - name: Lint
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Tests
+        run: pytest --cov --cov-report=term-missing
+
+      - name: Deterministic evaluation suites
+        # risk and tools need no model, no network and no ingested feeds, so a
+        # regression in the scoring or tool layer fails the build outright.
+        run: |
+          python -m vulnintel.cli db init
+          python -m vulnintel.cli eval risk
+          python -m vulnintel.cli eval tools
+
+      - name: Retrieval evaluation
+        run: |
+          python -m vulnintel.cli generate --assets 200 --applications 12
+          python -m vulnintel.cli rag build
+          python -m vulnintel.cli eval retrieval
+
+      - name: End-to-end graph
+        run: python -m vulnintel.cli eval end_to_end --provider mock
+
+  postgres:
+    name: Postgres backend
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: vulnintel
+          POSTGRES_PASSWORD: vulnintel
+          POSTGRES_DB: vulnintel
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U vulnintel"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      VULNINTEL_DB_BACKEND: postgres
+      VULNINTEL_POSTGRES_DSN: postgresql://vulnintel:vulnintel@localhost:5432/vulnintel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[postgres,dev]"
+
+      # One schema is rendered for two dialects, so it is only portable if it
+      # is executed against both. Two real bugs were found the first time this
+      # ran: DuckDB's DOUBLE shorthand, and a DISTINCT query whose ORDER BY
+      # column was not in the select list.
+      - name: Schema, views and pipeline on Postgres
+        run: |
+          python -m vulnintel.cli db init
+          python -m vulnintel.cli generate --assets 300 --applications 20
+          python -m vulnintel.cli rag build
+          python -m vulnintel.cli match
+          python -m vulnintel.cli score
+
+      - name: Evaluation suites on Postgres
+        env:
+          VULNINTEL_LLM_PROVIDER: mock
+        run: |
+          python -m vulnintel.cli eval tools
+          python -m vulnintel.cli eval risk
+          python -m vulnintel.cli eval retrieval
+
+      - name: Agent graph on Postgres
+        env:
+          VULNINTEL_LLM_PROVIDER: mock
+        run: python -m vulnintel.cli eval end_to_end --provider mock
+
+  mcp:
+    name: MCP servers speak the protocol
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+      - name: Handshake over stdio
+        run: |
+          python -m vulnintel.cli db init
+          python -m vulnintel.mcp_servers.client_demo
+
+  docker:
+    name: Image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: vulnintel-ai:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Container serves health
+        run: |
+          docker run -d --name vi -p 8000:8000 \
+            -e VULNINTEL_DB_BACKEND=duckdb -e VULNINTEL_LLM_PROVIDER=mock vulnintel-ai:ci
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/api/health > /dev/null; then
+              echo "healthy"; docker rm -f vi; exit 0
+            fi
+            sleep 2
+          done
+          echo "never became healthy"; docker logs vi; docker rm -f vi; exit 1

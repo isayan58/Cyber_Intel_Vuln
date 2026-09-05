@@ -25,6 +25,4 @@ def create_views(db: Database | None = None) -> int:
 
 
 def _only_comments(block: str) -> bool:
-    return all(
-        not line.strip() or line.strip().startswith("--") for line in block.splitlines()
-    )
+    return all(not line.strip() or line.strip().startswith("--") for line in block.splitlines())

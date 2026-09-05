@@ -1,41 +1,67 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "vulnintel-ai"
 version = "0.1.0"
 description = "Enterprise vulnerability and cyber-risk intelligence platform"
+readme = "README.md"
 requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Sayan Adhikary" }]
+keywords = ["security", "vulnerability-management", "rag", "langgraph", "mcp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Information Technology",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+]
+
 dependencies = [
+    # storage
     "duckdb>=1.1",
     "pyarrow>=17",
     "pandas>=2.2",
     "numpy>=1.26",
+    # config
     "pydantic>=2.9",
     "pydantic-settings>=2.5",
+    "pyyaml>=6.0",
+    # api + ui
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "jinja2>=3.1",
     "python-multipart>=0.0.9",
+    # feeds
     "httpx>=0.27",
-    "pyyaml>=6.0",
-    "Faker>=30",
-    "packaging>=24",
     "python-dateutil>=2.9",
-    "anthropic",
-    "mcp>=1.2",
+    "packaging>=24",
+    # agents
+    "anthropic>=1.0",
     "langgraph>=0.2",
     "langchain-core>=0.3",
+    "mcp>=2.0",
+    # data generation
+    "Faker>=30",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6"]
-postgres = ["psycopg[binary]>=3.2"]
+postgres = ["psycopg[binary]>=3.2", "pgvector>=0.3"]
 embeddings = ["sentence-transformers>=3.0"]
+docs = ["python-docx>=1.1"]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=5",
+    "ruff>=0.6",
+]
 
 [project.scripts]
 vulnintel = "vulnintel.cli:main"
 
-[build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
+[project.urls]
+Repository = "https://github.com/isayan58/Cyber_Intel_Vuln"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -43,15 +69,53 @@ where = ["src"]
 [tool.setuptools.package-data]
 vulnintel = ["data/*.sql"]
 
-[tool.ruff]
-line-length = 100
-target-version = "py312"
-
-[tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
-ignore = ["E501"]
+# --------------------------------------------------------------------------
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+addopts = "-q --strict-markers"
 filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "apps", "scripts", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "RUF", "BLE", "A", "PTH"]
+ignore = [
+    "E501",    # line length is handled by the formatter
+    "RUF001",  # en dashes and typographic quotes are deliberate in prose
+    "RUF002",
+    "RUF003",
+    "N818",    # exception names read better without the Error suffix here
+    # zip(xs, xs[1:]) states "compare each element with the next" more plainly
+    # than itertools.pairwise for readers who are not Python specialists, and
+    # every use here is a monotonicity assertion where clarity matters most.
+    "RUF007",
+    # Verdict is a str-Enum on purpose: it is persisted to the database and
+    # compared against strings from SQL, so the str mixin is load-bearing.
+    "UP042",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "SLF001"]        # asserts and private access are the point
+"scripts/*" = ["E402"]                 # sys.path is set before the imports
+"src/vulnintel/cli.py" = ["PLC0415"]   # imports are deferred to keep startup fast
+# The CPE ordinal tracks position within a nested configuration tree, not the
+# loop index, so enumerate() would silently change what is recorded.
+"src/vulnintel/ingest/nvd.py" = ["SIM113"]
+# _TOKEN is a compiled pattern shared by every instance; it is immutable in
+# practice and recompiling it per instance would be wasteful.
+"src/vulnintel/risk/versions.py" = ["RUF012"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["vulnintel"]
+
+[tool.coverage.run]
+source = ["src/vulnintel"]
+omit = ["*/mcp_servers/*"]
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]

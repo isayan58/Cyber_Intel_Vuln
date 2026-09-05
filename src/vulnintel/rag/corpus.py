@@ -50,24 +50,22 @@ def vulnerability_management_standard() -> str:
     rationales = "\n".join(
         f"- **{rule.rule_id} — {rule.label}.** {rule.rationale}" for rule in SLA_RULES
     )
-    weights = "\n".join(
-        f"| {name} | {weight:.2f} |" for name, weight in DEFAULT_WEIGHTS.items()
-    )
+    weights = "\n".join(f"| {name} | {weight:.2f} |" for name, weight in DEFAULT_WEIGHTS.items())
     criticality = "\n".join(f"| {k} | {v:.2f} |" for k, v in CRITICALITY_SCALE.items())
-    classification = "\n".join(
-        f"| {k} | {v:.2f} |" for k, v in DATA_CLASSIFICATION_SCALE.items()
-    )
+    classification = "\n".join(f"| {k} | {v:.2f} |" for k, v in DATA_CLASSIFICATION_SCALE.items())
 
-    return f"""{_front_matter(
-        title="Vulnerability Management Standard",
-        doc_type="standard",
-        authority="internal",
-        trust_tag="HIGH / internal authority",
-        policy_version="3.2",
-        effective_date=EFFECTIVE_DATE,
-        control_family="vulnerability-management",
-        visibility="internal",
-    )}
+    return f"""{
+        _front_matter(
+            title="Vulnerability Management Standard",
+            doc_type="standard",
+            authority="internal",
+            trust_tag="HIGH / internal authority",
+            policy_version="3.2",
+            effective_date=EFFECTIVE_DATE,
+            control_family="vulnerability-management",
+            visibility="internal",
+        )
+    }
 
 # Vulnerability Management Standard
 
@@ -163,16 +161,18 @@ not renew automatically.
 
 
 def patch_management_policy() -> str:
-    return f"""{_front_matter(
-        title="Patch Management Policy",
-        doc_type="policy",
-        authority="internal",
-        trust_tag="HIGH / internal authority",
-        policy_version="2.4",
-        effective_date=EFFECTIVE_DATE,
-        control_family="patch-management",
-        visibility="internal",
-    )}
+    return f"""{
+        _front_matter(
+            title="Patch Management Policy",
+            doc_type="policy",
+            authority="internal",
+            trust_tag="HIGH / internal authority",
+            policy_version="2.4",
+            effective_date=EFFECTIVE_DATE,
+            control_family="patch-management",
+            visibility="internal",
+        )
+    }
 
 # Patch Management Policy
 
@@ -219,16 +219,18 @@ For containerised workloads, the previous image digest is retained for 30 days.
 
 
 def risk_acceptance_sop() -> str:
-    return f"""{_front_matter(
-        title="Risk Acceptance Standard Operating Procedure",
-        doc_type="policy",
-        authority="internal",
-        trust_tag="HIGH / internal authority",
-        policy_version="1.9",
-        effective_date=EFFECTIVE_DATE,
-        control_family="governance",
-        visibility="internal",
-    )}
+    return f"""{
+        _front_matter(
+            title="Risk Acceptance Standard Operating Procedure",
+            doc_type="policy",
+            authority="internal",
+            trust_tag="HIGH / internal authority",
+            policy_version="1.9",
+            effective_date=EFFECTIVE_DATE,
+            control_family="governance",
+            visibility="internal",
+        )
+    }
 
 # Risk Acceptance Standard Operating Procedure
 
@@ -272,16 +274,18 @@ whose compensating control has lapsed is revoked immediately.
 
 
 def incident_escalation_standard() -> str:
-    return f"""{_front_matter(
-        title="Security Incident Escalation Standard",
-        doc_type="standard",
-        authority="internal",
-        trust_tag="HIGH / internal authority",
-        policy_version="2.1",
-        effective_date=EFFECTIVE_DATE,
-        control_family="incident-response",
-        visibility="internal",
-    )}
+    return f"""{
+        _front_matter(
+            title="Security Incident Escalation Standard",
+            doc_type="standard",
+            authority="internal",
+            trust_tag="HIGH / internal authority",
+            policy_version="2.1",
+            effective_date=EFFECTIVE_DATE,
+            control_family="incident-response",
+            visibility="internal",
+        )
+    }
 
 # Security Incident Escalation Standard
 
@@ -316,16 +320,18 @@ within one hour to assess notification obligations.
 
 
 def secure_sdlc_standard() -> str:
-    return f"""{_front_matter(
-        title="Secure SDLC Standard",
-        doc_type="standard",
-        authority="internal",
-        trust_tag="HIGH / internal authority",
-        policy_version="1.6",
-        effective_date=EFFECTIVE_DATE,
-        control_family="secure-development",
-        visibility="internal",
-    )}
+    return f"""{
+        _front_matter(
+            title="Secure SDLC Standard",
+            doc_type="standard",
+            authority="internal",
+            trust_tag="HIGH / internal authority",
+            policy_version="1.6",
+            effective_date=EFFECTIVE_DATE,
+            control_family="secure-development",
+            visibility="internal",
+        )
+    }
 
 # Secure SDLC Standard
 
@@ -360,16 +366,18 @@ days are blocked from production deployment.
 
 
 def application_criticality_definitions() -> str:
-    return f"""{_front_matter(
-        title="Application Criticality and Environment Definitions",
-        doc_type="standard",
-        authority="internal",
-        trust_tag="HIGH / enterprise context",
-        policy_version="1.3",
-        effective_date=EFFECTIVE_DATE,
-        control_family="asset-management",
-        visibility="internal",
-    )}
+    return f"""{
+        _front_matter(
+            title="Application Criticality and Environment Definitions",
+            doc_type="standard",
+            authority="internal",
+            trust_tag="HIGH / enterprise context",
+            policy_version="1.3",
+            effective_date=EFFECTIVE_DATE,
+            control_family="asset-management",
+            visibility="internal",
+        )
+    }
 
 # Application Criticality and Environment Definitions
 
@@ -413,16 +421,18 @@ public-facing WAF are still classified as internet-facing.
 
 
 def remediation_runbook() -> str:
-    return f"""{_front_matter(
-        title="Runbook: Responding to a Newly Published Critical CVE",
-        doc_type="runbook",
-        authority="internal",
-        trust_tag="Operational guidance",
-        policy_version="1.4",
-        effective_date=EFFECTIVE_DATE,
-        control_family="vulnerability-management",
-        visibility="internal",
-    )}
+    return f"""{
+        _front_matter(
+            title="Runbook: Responding to a Newly Published Critical CVE",
+            doc_type="runbook",
+            authority="internal",
+            trust_tag="Operational guidance",
+            policy_version="1.4",
+            effective_date=EFFECTIVE_DATE,
+            control_family="vulnerability-management",
+            visibility="internal",
+        )
+    }
 
 # Runbook: Responding to a Newly Published Critical CVE
 
@@ -469,16 +479,18 @@ after verification.
 
 
 def exception_handling_runbook() -> str:
-    return f"""{_front_matter(
-        title="Runbook: Handling Findings With No Available Fix",
-        doc_type="runbook",
-        authority="internal",
-        trust_tag="Operational guidance",
-        policy_version="1.1",
-        effective_date=EFFECTIVE_DATE,
-        control_family="vulnerability-management",
-        visibility="internal",
-    )}
+    return f"""{
+        _front_matter(
+            title="Runbook: Handling Findings With No Available Fix",
+            doc_type="runbook",
+            authority="internal",
+            trust_tag="Operational guidance",
+            policy_version="1.1",
+            effective_date=EFFECTIVE_DATE,
+            control_family="vulnerability-management",
+            visibility="internal",
+        )
+    }
 
 # Runbook: Handling Findings With No Available Fix
 
@@ -518,17 +530,19 @@ def superseded_vulnerability_standard() -> str:
     its numbers contradict the current standard, and a correct retriever must
     prefer version 3.2 and surface the conflict rather than average them.
     """
-    return f"""{_front_matter(
-        title="Vulnerability Management Standard (SUPERSEDED)",
-        doc_type="standard",
-        authority="internal",
-        trust_tag="SUPERSEDED — retained for audit",
-        policy_version="2.0",
-        effective_date=SUPERSEDED_DATE,
-        superseded_by="Vulnerability Management Standard v3.2",
-        control_family="vulnerability-management",
-        visibility="internal",
-    )}
+    return f"""{
+        _front_matter(
+            title="Vulnerability Management Standard (SUPERSEDED)",
+            doc_type="standard",
+            authority="internal",
+            trust_tag="SUPERSEDED — retained for audit",
+            policy_version="2.0",
+            effective_date=SUPERSEDED_DATE,
+            superseded_by="Vulnerability Management Standard v3.2",
+            control_family="vulnerability-management",
+            visibility="internal",
+        )
+    }
 
 # Vulnerability Management Standard (SUPERSEDED)
 
@@ -552,16 +566,18 @@ not reference EPSS. Both were introduced in version 3.0.
 
 
 def third_party_guidance() -> str:
-    return f"""{_front_matter(
-        title="Cloud Platform Hardening Guidance",
-        doc_type="guidance",
-        authority="internal",
-        trust_tag="HIGH / enterprise context",
-        policy_version="1.2",
-        effective_date=EFFECTIVE_DATE,
-        control_family="platform",
-        visibility="internal",
-    )}
+    return f"""{
+        _front_matter(
+            title="Cloud Platform Hardening Guidance",
+            doc_type="guidance",
+            authority="internal",
+            trust_tag="HIGH / enterprise context",
+            policy_version="1.2",
+            effective_date=EFFECTIVE_DATE,
+            control_family="platform",
+            visibility="internal",
+        )
+    }
 
 # Cloud Platform Hardening Guidance
 

@@ -99,8 +99,10 @@ class TestSupervisorPlanValidation:
     def test_invented_entities_are_normalised_not_trusted(self):
         agent = SupervisorAgent(persist=False)
         plan = agent._validate(
-            {"intent": "cve_investigation",
-             "entities": {"cve_ids": ["cve-2021-44228", "  "], "products": ["Django"]}},
+            {
+                "intent": "cve_investigation",
+                "entities": {"cve_ids": ["cve-2021-44228", "  "], "products": ["Django"]},
+            },
             {"question": "x", "user_role": "analyst"},
         )
         assert plan["entities"]["cve_ids"] == ["CVE-2021-44228"]
@@ -212,3 +214,51 @@ class TestEndToEndGraph:
         )
         nodes = {s["node"] for s in state["spans"]}
         assert "policy_rag" in nodes
+
+    def test_every_model_backed_node_reports_its_tokens(self, seeded_db, knowledge_db):
+        """A node that calls the model must record what it spent.
+
+        The cost panel sums per-node tokens, so a node that reports ``None``
+        is silently free: the bill is real but the figure shown next to the
+        answer excludes it. This caught the responder and the critic —
+        between them roughly a third of a run — reporting nothing at all.
+        """
+        from vulnintel.graph import run_investigation
+
+        state = run_investigation("What are our top security risks?", user_role="cto")
+
+        deterministic = {"replan", "join", "route"}
+        silent = [
+            span["node"]
+            for span in state["spans"]
+            if span.get("node") not in deterministic
+            and span.get("tier")
+            and span.get("input_tokens") is None
+        ]
+        assert not silent, f"model-backed nodes recorded no tokens: {silent}"
+
+    def test_the_responder_records_tokens_when_it_calls_the_model(self, seeded_db, knowledge_db):
+        """The responder builds its span by hand, so it is the easiest to forget.
+
+        ``prompt_version`` is the signal that the model actually ran: with no
+        findings the responder renders a deterministic notice instead, and
+        billing nothing is then the correct answer.
+        """
+        from vulnintel.agents.responder import ResponderAgent
+
+        agent = ResponderAgent(run_id=None, persist=False)
+        result = agent.run(
+            {
+                "question": "What are our top security risks?",
+                "response_mode": "executive",
+                "evidence": {
+                    "risk_remediation": {
+                        "interpretation": {"summary": "one finding"},
+                        "findings": [{"cve_id": "CVE-2024-0001", "score": 91.2}],
+                    }
+                },
+            }
+        )
+        assert result.prompt_version, "the responder did not reach the model"
+        assert result.span.get("input_tokens"), "the responder wrote an answer but billed nothing"
+        assert result.span.get("output_tokens")

@@ -71,7 +71,9 @@ class BM25Index:
         self.average_length = total / len(self.doc_lengths) if self.doc_lengths else 0.0
         log.debug("BM25 index built over %d chunks", len(self.chunk_ids))
 
-    def search(self, query: str, top_k: int = 40, allowed: set[str] | None = None) -> list[ScoredChunk]:
+    def search(
+        self, query: str, top_k: int = 40, allowed: set[str] | None = None
+    ) -> list[ScoredChunk]:
         if not self.chunk_ids:
             return []
 

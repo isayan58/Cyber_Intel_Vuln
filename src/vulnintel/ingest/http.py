@@ -93,16 +93,16 @@ class FeedClient:
 
             if response.status_code in RETRYABLE_STATUS and attempt < self.max_retries:
                 delay = self._retry_after(response) or self._backoff(attempt)
-                log.warning(
-                    "GET %s -> %d; retrying in %.1fs", url, response.status_code, delay
-                )
+                log.warning("GET %s -> %d; retrying in %.1fs", url, response.status_code, delay)
                 time.sleep(delay)
                 continue
 
             response.raise_for_status()
             return response
 
-        raise RuntimeError(f"GET {url} failed after {self.max_retries + 1} attempts") from last_error
+        raise RuntimeError(
+            f"GET {url} failed after {self.max_retries + 1} attempts"
+        ) from last_error
 
     def get_bytes(self, url: str, params: dict[str, str] | None = None) -> bytes:
         return self.get(url, params=params).content

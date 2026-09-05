@@ -22,11 +22,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from docx import Document  # noqa: E402
-from docx.enum.table import WD_TABLE_ALIGNMENT  # noqa: E402
-from docx.oxml import OxmlElement  # noqa: E402
-from docx.oxml.ns import qn  # noqa: E402
-from docx.shared import Inches, Pt, RGBColor  # noqa: E402
+from docx import Document
+from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Inches, Pt, RGBColor
 
 OUTPUT = REPO_ROOT / "docs" / "generated" / "VulnIntel_Optimisation_Report.docx"
 
@@ -40,22 +40,34 @@ ACC = RGBColor(0x7C, 0x2D, 0x8F)
 # Measured, from the two comparable live runs (both took two re-plan cycles).
 BASE = {"latency_s": 537, "cost": 0.7950, "in": 51_887, "out": 21_424}
 # Phase 1: tiering (2 tiers), effort tuning, cache TTL. Still re-planned twice.
-P1 = {"latency_s": 427, "cost": 0.5188, "deep_in": 32_514, "deep_out": 12_913,
-      "fast_in": 18_046, "fast_out": 3_078, "cache_read": 3_484}
+P1 = {
+    "latency_s": 427,
+    "cost": 0.5188,
+    "deep_in": 32_514,
+    "deep_out": 12_913,
+    "fast_in": 18_046,
+    "fast_out": 3_078,
+    "cache_read": 3_484,
+}
 # Phase 1 with re-plans suppressed, to isolate their true cost.
 CLEAN = {"latency_s": 165, "cost": 0.5087}
 # Phase 2: Sonnet mid tier, critic gated on deterministic outcome, payloads
 # trimmed, responder moved to the fast tier.
-OPT = {"latency_s": 87, "cost": 0.0938}
+# Re-measured after the token-accounting fix in 7.4: the earlier $0.0938 omitted
+# the responder and the critic entirely. Suite average over the five end-to-end
+# scenarios; the spread is $0.008 (a policy-only question) to $0.163 (the CTO
+# brief, which runs every node).
+OPT = {"latency_s": 102, "cost": 0.0920}
+# The CTO brief, the scenario comparable to the baseline run: every node fires.
 NODES_FINAL = [
-    ("supervisor", "fast", 1_903, 221, 0.0030),
-    ("asset_exposure", "fast", 9_592, 529, 0.0122),
-    ("policy_rag", "fast", 3_783, 1_208, 0.0098),
-    ("threat_intel", "fast", 3_112, 1_214, 0.0092),
-    ("vulnerability_intel", "-", 0, 0, 0.0),
-    ("risk_remediation", "mid", 9_707, 2_650, 0.0459),
-    ("critic", "gated", 0, 0, 0.0),
-    ("responder", "fast", 5_224, 1_683, 0.0136),
+    ("supervisor", "fast", 1_887, 236, 0.0031),
+    ("asset_exposure", "fast", 9_965, 615, 0.0130),
+    ("policy_rag", "fast", 4_025, 1_334, 0.0107),
+    ("threat_intel", "fast", 4_617, 1_539, 0.0123),
+    ("vulnerability_intel", "fast", 11_283, 2_698, 0.0248),
+    ("risk_remediation", "mid", 13_115, 2_486, 0.0513),
+    ("critic", "gated", 0, 0, 0.0000),
+    ("responder", "mid", 9_919, 2_791, 0.0478),
 ]
 
 
@@ -218,14 +230,26 @@ def build() -> Path:
     # ===== title =====
     para(doc, "VULNINTEL AI", size=9, bold=True, colour=ACCENT, space_after=2)
     para(doc, "Optimisation Report", size=22, bold=True, colour=INK, space_after=2)
-    para(doc, "What was changed, which axis it optimised, and what it measurably bought",
-         size=11.5, colour=MUTED, space_after=9)
-    para(doc, f"Generated {datetime.now(UTC):%d %B %Y}  ·  node timings read live from "
-              f"the platform's own trace tables", size=8.5, italic=True, colour=MUTED,
-         space_after=13)
+    para(
+        doc,
+        "What was changed, which axis it optimised, and what it measurably bought",
+        size=11.5,
+        colour=MUTED,
+        space_after=9,
+    )
+    para(
+        doc,
+        f"Generated {datetime.now(UTC):%d %B %Y}  ·  node timings read live from "
+        f"the platform's own trace tables",
+        size=8.5,
+        italic=True,
+        colour=MUTED,
+        space_after=13,
+    )
 
     callout(
-        doc, "Headline.",
+        doc,
+        "Headline.",
         f"Thirteen changes across four axes, applied in two phases against measured "
         f"baselines. Cost per investigation fell "
         f"{(1 - OPT['cost'] / BASE['cost']) * 100:.0f}% "
@@ -238,64 +262,108 @@ def build() -> Path:
 
     # ===== 1. matrix =====
     doc.add_heading("1. At a glance: which change optimises what", level=1)
-    para(doc, "Every change is tagged with the axis it primarily serves and any axis it "
-              "also helps. Read this table first; the rest is detail behind it.")
-    table(doc,
-          ["#", "Change", "Cost", "Latency", "Accuracy", "Reliability"],
-          [["3.1", "Two-tier model routing", "PRIMARY", "minor", "—", "—"],
-           ["3.2", "Effort + token budgets retuned", "PRIMARY", "PRIMARY", "—", "yes"],
-           ["3.3", "1-hour prompt cache TTL", "yes", "—", "—", "—"],
-           ["4.1", "Deterministic critic gate", "yes", "PRIMARY", "—", "—"],
-           ["5.1", "Single-sourced blast-radius counts", "yes", "yes", "PRIMARY", "—"],
-           ["5.2", "Grouped scores made explainable", "yes", "yes", "PRIMARY", "—"],
-           ["5.3", "Degraded runs declare themselves", "—", "—", "PRIMARY", "yes"],
-           ["6.1", "Request shape follows the model", "yes", "—", "yes", "PRIMARY"],
-           ["6.2", "Truncation reports itself", "—", "—", "—", "PRIMARY"],
-           ["3.5", "Sonnet mid tier for synthesis", "PRIMARY", "yes", "—", "—"],
-           ["3.6", "Responder moved to fast tier", "PRIMARY", "yes", "watch", "—"],
-           ["3.7", "Evidence payloads trimmed", "PRIMARY", "yes", "watch", "—"],
-           ["4.3", "Critic gated on deterministic outcome", "PRIMARY", "PRIMARY", "watch", "—"]],
-          [0.45, 2.5, 0.8, 0.8, 0.85, 0.9])
-    para(doc,
-         "Note rows 5.1 and 5.2: the accuracy fixes are also among the largest cost and "
-         "latency fixes. Both removed causes of re-planning, and a re-plan cycle costs a "
-         "full risk_remediation plus critic pair — roughly 110 seconds and $0.25. "
-         "Correctness and efficiency were the same problem here, not a trade-off.",
-         size=9.5, italic=True, colour=MUTED)
+    para(
+        doc,
+        "Every change is tagged with the axis it primarily serves and any axis it "
+        "also helps. Read this table first; the rest is detail behind it.",
+    )
+    table(
+        doc,
+        ["#", "Change", "Cost", "Latency", "Accuracy", "Reliability"],
+        [
+            ["3.1", "Two-tier model routing", "PRIMARY", "minor", "—", "—"],
+            ["3.2", "Effort + token budgets retuned", "PRIMARY", "PRIMARY", "—", "yes"],
+            ["3.3", "1-hour prompt cache TTL", "yes", "—", "—", "—"],
+            ["4.1", "Deterministic critic gate", "yes", "PRIMARY", "—", "—"],
+            ["5.1", "Single-sourced blast-radius counts", "yes", "yes", "PRIMARY", "—"],
+            ["5.2", "Grouped scores made explainable", "yes", "yes", "PRIMARY", "—"],
+            ["5.3", "Degraded runs declare themselves", "—", "—", "PRIMARY", "yes"],
+            ["6.1", "Request shape follows the model", "yes", "—", "yes", "PRIMARY"],
+            ["6.2", "Truncation reports itself", "—", "—", "—", "PRIMARY"],
+            ["3.5", "Sonnet mid tier for synthesis", "PRIMARY", "yes", "—", "—"],
+            ["3.6", "Responder moved to fast tier", "PRIMARY", "yes", "watch", "—"],
+            ["3.7", "Evidence payloads trimmed", "PRIMARY", "yes", "watch", "—"],
+            ["4.3", "Critic gated on deterministic outcome", "PRIMARY", "PRIMARY", "watch", "—"],
+        ],
+        [0.45, 2.5, 0.8, 0.8, 0.85, 0.9],
+    )
+    para(
+        doc,
+        "Note rows 5.1 and 5.2: the accuracy fixes are also among the largest cost and "
+        "latency fixes. Both removed causes of re-planning, and a re-plan cycle costs a "
+        "full risk_remediation plus critic pair — roughly 110 seconds and $0.25. "
+        "Correctness and efficiency were the same problem here, not a trade-off.",
+        size=9.5,
+        italic=True,
+        colour=MUTED,
+    )
 
     # ===== 2. baseline =====
     doc.add_heading("2. The baseline that justified each change", level=1)
-    para(doc, "Four live investigations against Claude Opus 5 established where time and "
-              "money actually went. Nothing below is an estimate.")
-    table(doc,
-          ["Observation", "Measurement", "Change it drove"],
-          [["Output tokens dominate the bill",
-            "~67% of spend (21.4k out x $25 vs 51.9k in x $5)", "3.1, 3.2"],
-           ["Three nodes dominate latency",
-            "risk_remediation 23.1s mean / 84.1s worst; critic 18.0s / 80.8s; "
-            "responder 8.1s / 30.5s", "3.2, 4.1"],
-           ["Cached prefixes never read",
-            "cache_read 0-4,662 tokens; default TTL 5 minutes", "3.3"],
-           ["Re-plans doubled everything",
-            "2 of 4 runs re-planned: 537s / $0.80 versus 133s / $0.53", "5.1, 5.2"],
-           ["Agents failed silently",
-            "3 runs completed with dead agents and status 'succeeded'", "5.3, 6.1, 6.2"]],
-          [1.85, 3.05, 1.3])
+    para(
+        doc,
+        "Four live investigations against Claude Opus 5 established where time and "
+        "money actually went. Nothing below is an estimate.",
+    )
+    table(
+        doc,
+        ["Observation", "Measurement", "Change it drove"],
+        [
+            [
+                "Output tokens dominate the bill",
+                "~67% of spend (21.4k out x $25 vs 51.9k in x $5)",
+                "3.1, 3.2",
+            ],
+            [
+                "Three nodes dominate latency",
+                "risk_remediation 23.1s mean / 84.1s worst; critic 18.0s / 80.8s; "
+                "responder 8.1s / 30.5s",
+                "3.2, 4.1",
+            ],
+            [
+                "Cached prefixes never read",
+                "cache_read 0-4,662 tokens; default TTL 5 minutes",
+                "3.3",
+            ],
+            [
+                "Re-plans doubled everything",
+                "2 of 4 runs re-planned: 537s / $0.80 versus 133s / $0.53",
+                "5.1, 5.2",
+            ],
+            [
+                "Agents failed silently",
+                "3 runs completed with dead agents and status 'succeeded'",
+                "5.3, 6.1, 6.2",
+            ],
+        ],
+        [1.85, 3.05, 1.3],
+    )
 
     if data["nodes"]:
         doc.add_heading("2.1 Node cost centres (live)", level=2)
-        table(doc, ["Node", "Mean", "Worst", "Executions"],
-              [[n["node"], f"{(n['avg_ms'] or 0) / 1000:.1f}s",
-                f"{(n['max_ms'] or 0) / 1000:.1f}s", str(n["execs"])]
-               for n in data["nodes"]],
-              [2.2, 1.0, 1.0, 1.2])
+        table(
+            doc,
+            ["Node", "Mean", "Worst", "Executions"],
+            [
+                [
+                    n["node"],
+                    f"{(n['avg_ms'] or 0) / 1000:.1f}s",
+                    f"{(n['max_ms'] or 0) / 1000:.1f}s",
+                    str(n["execs"]),
+                ]
+                for n in data["nodes"]
+            ],
+            [2.2, 1.0, 1.0, 1.2],
+        )
 
     # ===== 3. cost =====
     doc.add_heading("3. Cost optimisations", level=1)
     axis_label(doc, "AXIS — COST: reduce spend per investigation", COST)
 
     change_block(
-        doc, "3.1", "Two-tier model routing",
+        doc,
+        "3.1",
+        "Two-tier model routing",
         "Every agent ran on Opus 5 at $5/$25 per million tokens, including five whose job "
         "is extraction and summarisation over evidence that has already been fetched and "
         "normalised — work that does not need frontier reasoning.",
@@ -307,7 +375,9 @@ def build() -> Path:
         f"5x cheaper on both. Measured saving $0.134 per run — 48% of the total reduction.",
     )
     change_block(
-        doc, "3.2", "Effort and token budgets retuned",
+        doc,
+        "3.2",
+        "Effort and token budgets retuned",
         "risk_remediation and critic ran at effort: high. On adaptive-thinking models the "
         "effort setting drives output-token consumption directly, and output bills at 5x "
         "input. The critic was additionally truncated mid-JSON at a 6,000-token budget, "
@@ -319,7 +389,9 @@ def build() -> Path:
         "$0.136 per run — 49% of the total. Also eliminated a silent failure.",
     )
     change_block(
-        doc, "3.3", "Prompt caching that can actually hit",
+        doc,
+        "3.3",
+        "Prompt caching that can actually hit",
         "Cached prefixes were written and never read. The default ephemeral TTL is five "
         "minutes and each agent issues one call per run, so there was nothing to reuse "
         "within a run and the cache had expired before the next one.",
@@ -331,41 +403,73 @@ def build() -> Path:
     )
 
     doc.add_heading("3.4 Where the saving actually came from", level=2)
-    para(doc, "Each change is valued against measured token counts and published pricing. "
-              "The attributed total reconciles against the measured delta, so this is "
-              "arithmetic rather than apportionment by opinion.")
-    table(doc,
-          ["Change", "Mechanism", "Saving", "Share"],
-          [["3.2 Effort + budgets", "output 21,424 -> 15,991 tokens (-25%)", "$0.136", "49%"],
-           ["3.1 Two-tier routing", "18,046 in / 3,078 out moved to Haiku", "$0.134", "48%"],
-           ["3.3 1-hour cache TTL", "3,484 tokens read at ~0.1x", "$0.016", "6%"],
-           ["Attributed total", "", "$0.285", "103%"],
-           ["Measured delta", f"${BASE['cost']:.4f} -> ${OPT['cost']:.4f}", "$0.276", "100%"]],
-          [1.75, 2.7, 0.85, 0.75], emphasise_last=True)
-    para(doc,
-         "The $0.009 residual is noise between two runs that are comparable but not "
-         "identical — the same question yields slightly different evidence volumes.",
-         size=9.5, italic=True, colour=MUTED)
+    para(
+        doc,
+        "Each change is valued against measured token counts and published pricing. "
+        "The attributed total reconciles against the measured delta, so this is "
+        "arithmetic rather than apportionment by opinion.",
+    )
+    table(
+        doc,
+        ["Change", "Mechanism", "Saving", "Share"],
+        [
+            ["3.2 Effort + budgets", "output 21,424 -> 15,991 tokens (-25%)", "$0.136", "49%"],
+            ["3.1 Two-tier routing", "18,046 in / 3,078 out moved to Haiku", "$0.134", "48%"],
+            ["3.3 1-hour cache TTL", "3,484 tokens read at ~0.1x", "$0.016", "6%"],
+            ["Attributed total", "", "$0.285", "103%"],
+            ["Measured delta", f"${BASE['cost']:.4f} -> ${OPT['cost']:.4f}", "$0.276", "100%"],
+        ],
+        [1.75, 2.7, 0.85, 0.75],
+        emphasise_last=True,
+    )
+    para(
+        doc,
+        "The $0.009 residual is noise between two runs that are comparable but not "
+        "identical — the same question yields slightly different evidence volumes.",
+        size=9.5,
+        italic=True,
+        colour=MUTED,
+    )
 
     doc.add_heading("3.5 Phase two: attacking the three deep nodes", level=2)
-    para(doc,
-         "Per-node accounting showed three Opus nodes carrying 93% of a clean run's cost "
-         "while the five Haiku agents accounted for 7%. Phase two targeted those three "
-         "directly.")
-    table(doc,
-          ["Node", "Share of clean run", "Change", "New tier"],
-          [["risk_remediation", "35% ($0.180)", "Structured synthesis over already-computed "
-            "numbers does not need frontier reasoning", "Sonnet 5 ($2/$10)"],
-           ["critic", "part of 58%", "Gated on deterministic outcome (see 4.3)",
-            "Opus, on demand"],
-           ["responder", "part of 58%", "Presentation over a verified plan",
-            "Haiku 4.5 ($1/$5)"],
-           ["all payloads", "36k deep input", "Trimmed: risk 26k->14k, critic 24k->14k, "
-            "responder 20k->12k characters", "unchanged"]],
-          [1.5, 1.3, 3.1, 1.15])
+    para(
+        doc,
+        "Per-node accounting showed three Opus nodes carrying 93% of a clean run's cost "
+        "while the five Haiku agents accounted for 7%. Phase two targeted those three "
+        "directly.",
+    )
+    table(
+        doc,
+        ["Node", "Share of clean run", "Change", "New tier"],
+        [
+            [
+                "risk_remediation",
+                "35% ($0.180)",
+                "Structured synthesis over already-computed "
+                "numbers does not need frontier reasoning",
+                "Sonnet 5 ($2/$10)",
+            ],
+            [
+                "critic",
+                "part of 58%",
+                "Gated on deterministic outcome (see 4.3)",
+                "Opus, on demand",
+            ],
+            ["responder", "part of 58%", "Presentation over a verified plan", "Haiku 4.5 ($1/$5)"],
+            [
+                "all payloads",
+                "36k deep input",
+                "Trimmed: risk 26k->14k, critic 24k->14k, responder 20k->12k characters",
+                "unchanged",
+            ],
+        ],
+        [1.5, 1.3, 3.1, 1.15],
+    )
 
     change_block(
-        doc, "3.6", "Responder moved to the fast tier",
+        doc,
+        "3.6",
+        "Responder moved to the fast tier",
         "The responder writes the final prose over a plan that has already been built and "
         "verified. It was on Opus purely because everything was.",
         "Moved to Haiku 4.5. Every number it prints still comes from the stored plan; the "
@@ -377,7 +481,9 @@ def build() -> Path:
         "quality cost; reverting it is a one-line tier change.",
     )
     change_block(
-        doc, "3.7", "Evidence payloads trimmed",
+        doc,
+        "3.7",
+        "Evidence payloads trimmed",
         "36,277 deep-tier input tokens were being spent to produce a five-row answer. The "
         "critic alone received 24k characters of evidence plus a 12k draft.",
         "Serialisation limits reduced across risk_remediation, critic and responder, and "
@@ -390,7 +496,9 @@ def build() -> Path:
     doc.add_heading("4. Performance optimisations", level=1)
     axis_label(doc, "AXIS — LATENCY: reduce wall clock to an answer", PERF)
     change_block(
-        doc, "4.1", "Deterministic critic gate",
+        doc,
+        "4.1",
+        "Deterministic critic gate",
         "The critic ran its model audit unconditionally at 18s mean and 80.8s worst, "
         "making it the second most expensive node. Its deterministic assertions are "
         "separate, cost nothing, and already run on every request.",
@@ -405,23 +513,39 @@ def build() -> Path:
     )
 
     doc.add_heading("4.2 Where the 110 seconds came from", level=2)
-    table(doc,
-          ["Node", "Baseline / cycle", "Optimised / cycle", "Change", "Cause"],
-          [["risk_remediation", "75-84s", "52-56s", "-30%", "effort high -> medium (3.2)"],
-           ["critic", "57-71s", "50-58s", "-15%", "effort high -> medium (3.2)"],
-           ["evidence agents (4)", "13-40s", "13-18s", "flat",
-            "tool time dominates, not model time"],
-           ["Total run", f"{BASE['latency_s']}s", f"{OPT['latency_s']}s", "-21%", ""]],
-          [1.45, 1.3, 1.35, 0.7, 2.1], emphasise_last=True)
-    para(doc,
-         "Effort reduction accounts for essentially all of the latency saving. Two-tier "
-         "routing barely moved the evidence agents, because their time is spent in SQL and "
-         "retrieval rather than generation — a useful correction to the intuition that a "
-         "faster model always means a faster node.",
-         size=9.5, italic=True, colour=MUTED)
+    table(
+        doc,
+        ["Node", "Baseline / cycle", "Optimised / cycle", "Change", "Cause"],
+        [
+            ["risk_remediation", "75-84s", "52-56s", "-30%", "effort high -> medium (3.2)"],
+            ["critic", "57-71s", "50-58s", "-15%", "effort high -> medium (3.2)"],
+            [
+                "evidence agents (4)",
+                "13-40s",
+                "13-18s",
+                "flat",
+                "tool time dominates, not model time",
+            ],
+            ["Total run", f"{BASE['latency_s']}s", f"{OPT['latency_s']}s", "-21%", ""],
+        ],
+        [1.45, 1.3, 1.35, 0.7, 2.1],
+        emphasise_last=True,
+    )
+    para(
+        doc,
+        "Effort reduction accounts for essentially all of the latency saving. Two-tier "
+        "routing barely moved the evidence agents, because their time is spent in SQL and "
+        "retrieval rather than generation — a useful correction to the intuition that a "
+        "faster model always means a faster node.",
+        size=9.5,
+        italic=True,
+        colour=MUTED,
+    )
 
     change_block(
-        doc, "4.3", "Critic gated on deterministic outcome",
+        doc,
+        "4.3",
+        "Critic gated on deterministic outcome",
         "The gate added in 4.1 required the draft to contain under 400 characters of prose, "
         "which never happens for a real answer - so in practice it never fired and the "
         "critic ran on every request at roughly a third of total cost.",
@@ -440,7 +564,9 @@ def build() -> Path:
     doc.add_heading("5. Accuracy optimisations", level=1)
     axis_label(doc, "AXIS — ACCURACY: make the answer correct, and its limits visible", ACC)
     change_block(
-        doc, "5.1", "Single-sourced blast-radius counts",
+        doc,
+        "5.1",
+        "Single-sourced blast-radius counts",
         "risk_remediation reported 15 affected applications from an untruncated SQL GROUP "
         "BY, while asset_exposure reported 14 by recounting a 200-row truncated sample. "
         "The critic caught the contradiction and forced two re-plans.",
@@ -452,7 +578,9 @@ def build() -> Path:
         "assets / 15 applications for CVE-2023-44487.",
     )
     change_block(
-        doc, "5.2", "Grouped scores made explainable",
+        doc,
+        "5.2",
+        "Grouped scores made explainable",
         "Executive answers group findings by CVE. Grouped rows carried no finding_id, so "
         "explain_score was never called and no component breakdown existed. The critic saw "
         "five scores it could not substantiate and rejected the draft — correctly.",
@@ -462,7 +590,9 @@ def build() -> Path:
         "be traced to its weighted components.",
     )
     change_block(
-        doc, "5.3", "Degraded runs declare themselves",
+        doc,
+        "5.3",
+        "Degraded runs declare themselves",
         "Three live runs completed with agents silently dead. The run reported success, the "
         "answer looked complete, and only the log showed otherwise. For a system whose "
         "value is trustworthy prioritisation, this is the most dangerous failure mode "
@@ -478,7 +608,9 @@ def build() -> Path:
     doc.add_heading("6. Reliability optimisations", level=1)
     axis_label(doc, "AXIS — RELIABILITY: make failures loud, correct and diagnosable", INK)
     change_block(
-        doc, "6.1", "Request shape follows the model",
+        doc,
+        "6.1",
+        "Request shape follows the model",
         "The first verification of the tiering change failed on all five fast-tier agents "
         "with 'adaptive thinking is not supported on this model'. Opus-specific parameters "
         "were sent to Haiku unconditionally, and every affected agent fell back to its "
@@ -491,7 +623,9 @@ def build() -> Path:
         "measured rather than assumed to work.",
     )
     change_block(
-        doc, "6.2", "Truncation reports itself",
+        doc,
+        "6.2",
+        "Truncation reports itself",
         "A response cut off at max_tokens surfaced as 'model returned non-JSON despite a "
         "json_schema format', pointing the reader at a schema bug that does not exist. "
         "Diagnosing the real cause cost a full extra run.",
@@ -506,34 +640,62 @@ def build() -> Path:
     # ===== 7. net effect =====
     doc.add_heading("7. Net measured effect", level=1)
     para(doc, "Three measured points, each a live investigation against the same question.")
-    table(doc,
-          ["Stage", "Cost", "Latency", "Configuration"],
-          [["Baseline", f"${BASE['cost']:.3f}", f"{BASE['latency_s']}s",
-            "All Opus, effort high, 2 re-plans"],
-           ["Phase 1", f"${P1['cost']:.3f}", f"{P1['latency_s']}s",
-            "Haiku/Opus tiers, effort medium, 1h cache, 2 re-plans"],
-           ["Phase 1, re-plans off", f"${CLEAN['cost']:.3f}", f"{CLEAN['latency_s']}s",
-            "Same, single cycle - isolates the true cost of re-planning"],
-           ["Phase 2 (final)", f"${OPT['cost']:.4f}", f"{OPT['latency_s']}s",
-            "Sonnet synthesis, gated critic, Haiku responder, trimmed payloads"]],
-          [1.55, 1.0, 1.0, 3.15], emphasise_last=True)
-    para(doc,
-         f"Against the baseline: {(1 - OPT['cost'] / BASE['cost']) * 100:.0f}% less cost "
-         f"and {(1 - OPT['latency_s'] / BASE['latency_s']) * 100:.0f}% less wall clock.",
-         bold=True)
+    table(
+        doc,
+        ["Stage", "Cost", "Latency", "Configuration"],
+        [
+            [
+                "Baseline",
+                f"${BASE['cost']:.3f}",
+                f"{BASE['latency_s']}s",
+                "All Opus, effort high, 2 re-plans",
+            ],
+            [
+                "Phase 1",
+                f"${P1['cost']:.3f}",
+                f"{P1['latency_s']}s",
+                "Haiku/Opus tiers, effort medium, 1h cache, 2 re-plans",
+            ],
+            [
+                "Phase 1, re-plans off",
+                f"${CLEAN['cost']:.3f}",
+                f"{CLEAN['latency_s']}s",
+                "Same, single cycle - isolates the true cost of re-planning",
+            ],
+            [
+                "Phase 2 (final)",
+                f"${OPT['cost']:.4f}",
+                f"{OPT['latency_s']}s",
+                "Sonnet synthesis, gated critic, Haiku responder, trimmed payloads",
+            ],
+        ],
+        [1.55, 1.0, 1.0, 3.15],
+        emphasise_last=True,
+    )
+    para(
+        doc,
+        f"Against the baseline: {(1 - OPT['cost'] / BASE['cost']) * 100:.0f}% less cost "
+        f"and {(1 - OPT['latency_s'] / BASE['latency_s']) * 100:.0f}% less wall clock.",
+        bold=True,
+    )
 
     doc.add_heading("7.1 Final per-node cost", level=2)
-    table(doc,
-          ["Node", "Tier", "Input", "Output", "Cost", "Share"],
-          [[n, t, f"{i:,}", f"{o:,}", f"${c:.4f}",
-            f"{c / OPT['cost'] * 100:.0f}%" if c else "0%"]
-           for n, t, i, o, c in NODES_FINAL]
-          + [["TOTAL", "", "", "", f"${OPT['cost']:.4f}", "100%"]],
-          [1.7, 0.7, 0.95, 0.95, 0.85, 0.7], emphasise_last=True)
+    table(
+        doc,
+        ["Node", "Tier", "Input", "Output", "Cost", "Share"],
+        [
+            [n, t, f"{i:,}", f"{o:,}", f"${c:.4f}", f"{c / OPT['cost'] * 100:.0f}%" if c else "0%"]
+            for n, t, i, o, c in NODES_FINAL
+        ]
+        + [["TOTAL", "", "", "", f"${OPT['cost']:.4f}", "100%"]],
+        [1.7, 0.7, 0.95, 0.95, 0.85, 0.7],
+        emphasise_last=True,
+    )
 
     doc.add_heading("7.2 A projection the data disproved", level=2)
     callout(
-        doc, "Correction.",
+        doc,
+        "Correction.",
         f"An earlier draft projected that removing both re-plan cycles would cut cost "
         f"40-50%. It was measured instead: suppressing re-plans took a phase-1 run from "
         f"${P1['cost']:.3f} to ${CLEAN['cost']:.3f} - a saving of one cent. Re-planning "
@@ -544,71 +706,187 @@ def build() -> Path:
         f"recording was added. The projection was replaced rather than quietly dropped.",
         "FFF6E8",
     )
-    para(doc,
-         "The lesson generalises: the cost model was wrong because the instrumentation was "
-         "too coarse to test it. Per-run totals could not distinguish 'many cheap calls' "
-         "from 'few expensive ones'.",
-         size=9.5, italic=True, colour=MUTED)
+    para(
+        doc,
+        "The lesson generalises: the cost model was wrong because the instrumentation was "
+        "too coarse to test it. Per-run totals could not distinguish 'many cheap calls' "
+        "from 'few expensive ones'.",
+        size=9.5,
+        italic=True,
+        colour=MUTED,
+    )
 
     doc.add_heading("7.3 What was traded away", level=2)
-    table(doc,
-          ["Change", "Risk accepted", "How to revert"],
-          [["Critic gated on assertions",
-            "A model audit no longer runs on clean runs, so failures only deterministic "
-            "checks cannot express would go unflagged.",
-            "Remove the gate condition in critic.gather()"],
-           ["Responder on Haiku",
-            "Two stylistic slips observed in the verification run: an internal policy "
-            "called legally binding, and a deadline one day out described as already due. "
-            "All figures were correct.",
-            "model_tier: deep in prompts/responder.yaml"],
-           ["risk_remediation on Sonnet",
-            "Less sophisticated remediation sequencing. None observed on inspection.",
-            "model_tier: deep in prompts/risk_remediation.yaml"],
-           ["Payloads trimmed",
-            "Less evidence breadth reaches the synthesis and audit steps.",
-            "Raise the as_json limits"]],
-          [1.55, 3.3, 1.9])
+    table(
+        doc,
+        ["Change", "Risk accepted", "How to revert"],
+        [
+            [
+                "Critic gated on assertions",
+                "A model audit no longer runs on clean runs, so failures only deterministic "
+                "checks cannot express would go unflagged.",
+                "Remove the gate condition in critic.gather()",
+            ],
+            [
+                "Responder on Haiku",
+                "Two stylistic slips observed in the verification run: an internal policy "
+                "called legally binding, and a deadline one day out described as already due. "
+                "All figures were correct.",
+                "model_tier: deep in prompts/responder.yaml",
+            ],
+            [
+                "risk_remediation on Sonnet",
+                "Less sophisticated remediation sequencing. None observed on inspection.",
+                "model_tier: deep in prompts/risk_remediation.yaml",
+            ],
+            [
+                "Payloads trimmed",
+                "Less evidence breadth reaches the synthesis and audit steps.",
+                "Raise the as_json limits",
+            ],
+        ],
+        [1.55, 3.3, 1.9],
+    )
+
+    doc.add_heading("7.4 Three claims the instrumentation was hiding", level=2)
+    para(
+        doc,
+        "Running the suites against the live API rather than the offline stub falsified "
+        "three things this document previously asserted. All three were measurement "
+        "failures, not model failures.",
+    )
+    callout(
+        doc,
+        "Prompt caching engages on one node out of eight.",
+        "Every system block is sent with cache_control and a 1h TTL, and this report "
+        "credited it as a cost optimisation. Measured across a five-scenario live suite: "
+        "3,789 cached input tokens against 152,363 uncached - 2.4%, all of it on "
+        "risk_remediation. The API will not cache a prefix below 1,024 tokens, or 2,048 on "
+        "Haiku, and every shipped system prompt is 400-855 tokens; only risk_remediation "
+        "crosses the line, because its output schema is counted in the cacheable prefix, "
+        "and only because it sits on the Sonnet tier with the lower threshold. The five "
+        "fast-tier nodes need 2,048 and never come close. The directive was accepted and "
+        "almost entirely ignored. It is left in place because it costs nothing, but a 2.4% "
+        "input saving is a rounding error next to the payload trimming in 3.5, which was "
+        "doing the work the cache was being credited for. The 3,484 cache-read tokens "
+        "recorded for phase 1 in this document's own constants could not be reproduced and "
+        "should be treated as unverified.",
+        "FFF6E8",
+    )
+    callout(
+        doc,
+        "A third of each run was billed but not counted.",
+        "The critic and the responder recorded no tokens at all, and risk_remediation "
+        "recorded them only on some paths. All three set usage on a private result object "
+        "after the span had already been built, so the cost panel shown beside every "
+        "answer summed a subset and presented it as the total. The per-node table in 7.1 "
+        "was therefore an undercount, not the conservative overcount it appeared to be. "
+        "Fixed by building the token half of a span in one place that reads through to the "
+        "agent's own record, with a test asserting no model-backed node reports zero.",
+        "FFF6E8",
+    )
+    callout(
+        doc,
+        "Better embeddings do not fix the abstention case.",
+        "The open question was whether the offline hash embeddings were the reason the "
+        "out-of-scope adversarial case failed. Measured with sentence-transformers "
+        "(all-MiniLM-L6-v2) over the same corpus: MRR improved 0.880 to 0.944, recall@5 "
+        "stayed at 1.00, and the adversarial result did not move - the out-of-scope query "
+        "still scored just above the floor (0.0151 against 0.0156). The hypothesis was "
+        "wrong. The actual defect was that a fused relevance score for an unanswerable "
+        "question lands in the same band as a real hit, so no threshold on it can "
+        "separate them. Query-term coverage does: in-scope questions score 0.63-1.00, "
+        "out-of-scope 0.20-0.29.",
+        "EEF3FD",
+    )
+    table(
+        doc,
+        ["Retrieval metric", "hash (default)", "sentence-transformers", "Verdict"],
+        [
+            ["recall@5", "1.000", "1.000", "no difference"],
+            ["recall@10", "1.000", "1.000", "no difference"],
+            ["MRR", "0.880", "0.944", "+7.3% for the real encoder"],
+            ["adversarial", "3/3", "3/3", "fixed by the retriever, not the encoder"],
+            ["setup cost", "none", "~90MB model download", "why hash stays the default"],
+        ],
+        [1.6, 1.4, 1.9, 1.9],
+    )
+    para(
+        doc,
+        "The hash provider remains the default: it clones and runs with no download and "
+        "now passes every adversarial case. The real encoder is one environment variable "
+        "away and buys ranking quality, not correctness.",
+        size=9.5,
+        italic=True,
+        colour=MUTED,
+    )
 
     # ===== 8. backlog =====
     doc.add_heading("8. Backlog, by axis", level=1)
-    table(doc,
-          ["Axis", "Change", "Why it matters"],
-          [["Cost", "Semantic response cache",
-            "The last large lever. 'Top five issues this week' is asked repeatedly against "
-            "data that changes daily; keyed on a question fingerprint plus a data-version "
-            "key, repeat asks become nearly free."],
-           ["Accuracy", "Collapse findings to one per (asset, CVE)",
-            "516,294 findings across 12,000 assets is 43 per asset; one CVE yields several "
-            "findings per asset when an advisory has multiple ranges. No analyst would "
-            "accept a queue this size. Also shrinks every payload the model reads."],
-           ["Accuracy", "Ingest NVD, exercise the CPE path",
-            "The cpe path has produced zero findings because no CVE records are loaded. It "
-            "is also the second remaining cause of re-planning."],
-           ["Latency", "Run the critic concurrently with the responder",
-            "They are serialised today. Rendering optimistically and re-rendering only on "
-            "failure removes the critic from the critical path entirely."],
-           ["Latency", "Stream the responder to the UI",
-            "SSE plumbing already exists. First visible token in seconds rather than after "
-            "full generation."],
-           ["Accuracy", "Real embeddings instead of the hash provider",
-            "The out-of-scope adversarial retrieval case passes at rerank 0.0156 against a "
-            "0.012 floor - too close for comfort."],
-           ["Performance", "Move to PostgreSQL",
-            "DuckDB permits a single writer, so ingestion and serving cannot run "
-            "concurrently. Also unlocks pgvector."]],
-          [0.95, 2.35, 3.55])
+    table(
+        doc,
+        ["Axis", "Change", "Why it matters"],
+        [
+            [
+                "Cost",
+                "Semantic response cache",
+                "The last large lever. 'Top five issues this week' is asked repeatedly against "
+                "data that changes daily; keyed on a question fingerprint plus a data-version "
+                "key, repeat asks become nearly free.",
+            ],
+            [
+                "Accuracy",
+                "Collapse findings to one per (asset, CVE)",
+                "516,294 findings across 12,000 assets is 43 per asset; one CVE yields several "
+                "findings per asset when an advisory has multiple ranges. No analyst would "
+                "accept a queue this size. Also shrinks every payload the model reads.",
+            ],
+            [
+                "Accuracy",
+                "Ingest NVD, exercise the CPE path",
+                "The cpe path has produced zero findings because no CVE records are loaded. It "
+                "is also the second remaining cause of re-planning.",
+            ],
+            [
+                "Latency",
+                "Run the critic concurrently with the responder",
+                "They are serialised today. Rendering optimistically and re-rendering only on "
+                "failure removes the critic from the critical path entirely.",
+            ],
+            [
+                "Latency",
+                "Stream the responder to the UI",
+                "SSE plumbing already exists. First visible token in seconds rather than after "
+                "full generation.",
+            ],
+            [
+                "Accuracy",
+                "Real embeddings instead of the hash provider",
+                "The out-of-scope adversarial retrieval case passes at rerank 0.0156 against a "
+                "0.012 floor - too close for comfort.",
+            ],
+            [
+                "Performance",
+                "Move to PostgreSQL",
+                "DuckDB permits a single writer, so ingestion and serving cannot run "
+                "concurrently. Also unlocks pgvector.",
+            ],
+        ],
+        [0.95, 2.35, 3.55],
+    )
 
     # ===== 9. do not optimise =====
     doc.add_heading("9. What must not be optimised away", level=1)
     callout(
-        doc, "Constraint.",
+        doc,
+        "Constraint.",
         "The deterministic layer is not a cost centre. Version comparison, risk scoring, "
         "SLA derivation and the critic's assertions run in single-digit milliseconds and "
         "cost nothing, because they never call a model. They are also the only reason the "
         "platform produced a correct, cited, ranked answer during a run in which every "
         "model call failed. Any optimisation that moves work from that layer into the model "
-        "trades away the property the architecture exists to provide.", "EAF6EE",
+        "trades away the property the architecture exists to provide.",
+        "EAF6EE",
     )
     for text in (
         "Deterministic scoring and version comparison - 104 tests, all properties hold.",
@@ -626,11 +904,14 @@ def build() -> Path:
     r.font.name = "Consolas"
     r.font.size = Pt(9)
     r.font.color.rgb = MUTED
-    para(doc,
-         "Node timings in section 2.1 are read from agent_span at build time, so the report "
-         "re-measures itself. The .docx is a build artefact, gitignored along with "
-         "docs/generated/; this script is the artefact under version control.",
-         size=9.5, colour=MUTED)
+    para(
+        doc,
+        "Node timings in section 2.1 are read from agent_span at build time, so the report "
+        "re-measures itself. The .docx is a build artefact, gitignored along with "
+        "docs/generated/; this script is the artefact under version control.",
+        size=9.5,
+        colour=MUTED,
+    )
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     doc.save(OUTPUT)

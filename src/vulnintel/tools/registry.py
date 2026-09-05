@@ -89,8 +89,13 @@ TOOL_SPECS: list[ToolSpec] = [
         intel_tools.search_cves,
         _schema(
             {
-                "product": _STR, "vendor": _STR, "min_cvss": _NUM, "min_epss": _NUM,
-                "cwe": _STR, "kev_only": _BOOL, "limit": _INT,
+                "product": _STR,
+                "vendor": _STR,
+                "min_cvss": _NUM,
+                "min_epss": _NUM,
+                "cwe": _STR,
+                "kev_only": _BOOL,
+                "limit": _INT,
             }
         ),
     ),
@@ -149,8 +154,13 @@ TOOL_SPECS: list[ToolSpec] = [
         assets_tools.search_assets,
         _schema(
             {
-                "application_name": _STR, "environment": _STR, "internet_facing": _BOOL,
-                "business_criticality": _STR, "tier": _INT, "product": _STR, "limit": _INT,
+                "application_name": _STR,
+                "environment": _STR,
+                "internet_facing": _BOOL,
+                "business_criticality": _STR,
+                "tier": _INT,
+                "product": _STR,
+                "limit": _INT,
             }
         ),
     ),
@@ -207,8 +217,12 @@ TOOL_SPECS: list[ToolSpec] = [
         knowledge_tools.search_policy,
         _schema(
             {
-                "query": _STR, "authority": _STR, "doc_type": _STR, "control_family": _STR,
-                "include_superseded": _BOOL, "top_k": _INT,
+                "query": _STR,
+                "authority": _STR,
+                "doc_type": _STR,
+                "control_family": _STR,
+                "include_superseded": _BOOL,
+                "top_k": _INT,
             },
             ["query"],
         ),
@@ -244,9 +258,15 @@ TOOL_SPECS: list[ToolSpec] = [
         risk_tools.rank_findings,
         _schema(
             {
-                "limit": _INT, "application_name": _STR, "cve_id": _STR, "environment": _STR,
-                "internet_facing_only": _BOOL, "kev_only": _BOOL, "tier": _INT,
-                "exclude_risk_accepted": _BOOL, "group_by_cve": _BOOL,
+                "limit": _INT,
+                "application_name": _STR,
+                "cve_id": _STR,
+                "environment": _STR,
+                "internet_facing_only": _BOOL,
+                "kev_only": _BOOL,
+                "tier": _INT,
+                "exclude_risk_accepted": _BOOL,
+                "group_by_cve": _BOOL,
             }
         ),
     ),
@@ -286,13 +306,25 @@ def tools_for_server(server: str) -> list[ToolSpec]:
 AGENT_TOOL_ALLOWLIST: dict[str, set[str]] = {
     "supervisor": {"get_inventory_summary", "list_policy_versions"},
     "asset_exposure": {
-        "search_assets", "get_asset", "get_application_dependencies",
-        "find_assets_by_software", "get_business_context", "get_findings_for_cve",
+        "search_assets",
+        "get_asset",
+        "get_application_dependencies",
+        "find_assets_by_software",
+        "get_business_context",
+        "get_findings_for_cve",
         "get_inventory_summary",
     },
-    "vulnerability_intel": {"get_cve", "search_cves", "get_package_advisories", "get_feed_freshness"},
+    "vulnerability_intel": {
+        "get_cve",
+        "search_cves",
+        "get_package_advisories",
+        "get_feed_freshness",
+    },
     "threat_intel": {
-        "get_kev_status", "get_epss", "get_epss_history", "get_attack_context",
+        "get_kev_status",
+        "get_epss",
+        "get_epss_history",
+        "get_attack_context",
         "get_feed_freshness",
     },
     "policy_rag": {"search_policy", "retrieve_chunk", "list_policy_versions", "get_sla_rules"},
@@ -362,7 +394,7 @@ class ToolBox:
         try:
             result = spec.handler(**arguments)
             return result
-        except Exception as exc:  # noqa: BLE001 - recorded then re-raised
+        except Exception as exc:
             status, error = "error", str(exc)
             raise
         finally:

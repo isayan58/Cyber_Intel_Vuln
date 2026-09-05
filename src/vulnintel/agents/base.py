@@ -70,7 +70,7 @@ class Agent(abc.ABC):
 
         try:
             gathered = self.gather(state)
-        except Exception as exc:  # noqa: BLE001 - one agent failing must not kill the run
+        except Exception as exc:
             log.exception("%s: evidence gathering failed", self.name)
             result.errors.append(f"{self.name}: {exc}")
             gathered = {"error": str(exc)}
@@ -82,11 +82,14 @@ class Agent(abc.ABC):
             except LLMError as exc:
                 log.warning("%s: model interpretation failed: %s", self.name, exc)
                 result.errors.append(f"{self.name} interpretation: {exc}")
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log.exception("%s: model interpretation raised", self.name)
                 result.errors.append(f"{self.name} interpretation: {exc}")
 
-        result.output = {**gathered, **({"interpretation": interpretation} if interpretation else {})}
+        result.output = {
+            **gathered,
+            **({"interpretation": interpretation} if interpretation else {}),
+        }
         result.span = {
             "span_id": self.span_id,
             "node": self.name,
@@ -103,10 +106,7 @@ class Agent(abc.ABC):
                 for call in self.tools.calls
             ],
             "started_at": datetime.now(UTC).replace(tzinfo=None),
-            "input_tokens": result.usage.get("input_tokens"),
-            "output_tokens": result.usage.get("output_tokens"),
-            "cache_read_tokens": result.usage.get("cache_read_tokens"),
-            "tier": result.usage.get("tier"),
+            **self._usage_fields(result),
         }
         if result.prompt_version:
             result.span["prompt_version"] = result.prompt_version
@@ -114,9 +114,26 @@ class Agent(abc.ABC):
 
     # -- helpers --------------------------------------------------------------
 
-    def _ask_structured(
-        self, result: AgentResult, **variables: Any
-    ) -> dict[str, Any]:
+    def _usage_fields(self, result: AgentResult) -> dict[str, Any]:
+        """The token half of a span.
+
+        Agents that override ``interpret`` run the model against a *private*
+        AgentResult and stash the usage on ``self._last_usage``, so by the time
+        the span is built the outer result is still empty. Reading through to
+        the stash here is what stops those nodes reporting zero tokens — and a
+        node reporting zero tokens is worse than no cost figure at all, because
+        the run cost still adds up and simply excludes them.
+        """
+        usage = result.usage or getattr(self, "_last_usage", {}) or {}
+        return {
+            "input_tokens": usage.get("input_tokens"),
+            "output_tokens": usage.get("output_tokens"),
+            "cache_read_tokens": usage.get("cache_read_tokens"),
+            "cache_creation_tokens": usage.get("cache_creation_tokens"),
+            "tier": usage.get("tier"),
+        }
+
+    def _ask_structured(self, result: AgentResult, **variables: Any) -> dict[str, Any]:
         """Run this agent's prompt with its declared output schema."""
         prompt = get_prompt(self.prompt_name)  # type: ignore[arg-type]
         result.prompt_version = prompt.label
@@ -136,6 +153,7 @@ class Agent(abc.ABC):
             "input_tokens": response.usage.input_tokens,
             "output_tokens": response.usage.output_tokens,
             "cache_read_tokens": response.usage.cache_read_tokens,
+            "cache_creation_tokens": response.usage.cache_creation_tokens,
             "tier": prompt.model_tier,
         }
         return response.structured or {}
@@ -155,6 +173,7 @@ class Agent(abc.ABC):
             "input_tokens": response.usage.input_tokens,
             "output_tokens": response.usage.output_tokens,
             "cache_read_tokens": response.usage.cache_read_tokens,
+            "cache_creation_tokens": response.usage.cache_creation_tokens,
             "tier": prompt.model_tier,
         }
         return response.text
@@ -170,8 +189,7 @@ def as_json(value: Any, limit: int = 24000) -> str:
     if len(text) <= limit:
         return text
     return (
-        text[:limit]
-        + f"\n\n... [TRUNCATED: {len(text) - limit} more characters were omitted. "
+        text[:limit] + f"\n\n... [TRUNCATED: {len(text) - limit} more characters were omitted. "
         "Counts stated in the aggregates above remain authoritative; do not infer "
         "totals from the rows shown here.]"
     )

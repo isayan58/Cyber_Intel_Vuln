@@ -1,0 +1,49 @@
+# Local stack: PostgreSQL plus the API and UI.
+#
+# Postgres rather than DuckDB here for one concrete reason: DuckDB permits a
+# single writer, so ingestion and serving cannot run at the same time. That is
+# fine on a laptop and awkward everywhere else. The schema is written once and
+# rendered per dialect, so the switch is a single environment variable.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: vulnintel
+      POSTGRES_PASSWORD: vulnintel
+      POSTGRES_DB: vulnintel
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vulnintel -d vulnintel"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      VULNINTEL_DB_BACKEND: postgres
+      VULNINTEL_POSTGRES_DSN: postgresql://vulnintel:vulnintel@postgres:5432/vulnintel
+      VULNINTEL_BRONZE_ROOT: /data/bronze
+      VULNINTEL_LLM_PROVIDER: ${VULNINTEL_LLM_PROVIDER:-mock}
+      VULNINTEL_API_KEY: ${VULNINTEL_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      NVD_API_KEY: ${NVD_API_KEY:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      - bronze:/data/bronze
+      # Prompts are mounted so they can be edited and hot-reloaded without a rebuild.
+      - ./prompts:/app/prompts:ro
+    command: >
+      uvicorn api.main:app --host 0.0.0.0 --port 8000
+
+volumes:
+  pgdata:
+  bronze:

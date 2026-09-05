@@ -119,7 +119,11 @@ def get_application_dependencies(
             [application_name.strip().lower(), f"%{application_name.strip().lower()}%"],
         )
     if app is None:
-        return {"found": False, "application_id": application_id, "application_name": application_name}
+        return {
+            "found": False,
+            "application_id": application_id,
+            "application_name": application_name,
+        }
 
     app_id = app["application_id"]
     return {
@@ -228,8 +232,9 @@ def get_findings_for_cve(
     # truncated row sample the caller receives. Callers must use these and never
     # recount the rows: the sample is capped at `limit`, so recounting silently
     # under-reports and puts two agents into disagreement.
-    totals = conn.query_one(
-        """
+    totals = (
+        conn.query_one(
+            """
         SELECT count(*)                                            AS total_findings,
                count(DISTINCT asset_id)                            AS distinct_assets,
                count(DISTINCT application_id)                      AS distinct_applications,
@@ -241,8 +246,10 @@ def get_findings_for_cve(
         FROM v_finding_enriched
         WHERE cve_id = ? AND status <> 'remediated'
         """,
-        [cve_id.strip().upper()],
-    ) or {}
+            [cve_id.strip().upper()],
+        )
+        or {}
+    )
 
     return {
         "cve_id": cve_id.strip().upper(),

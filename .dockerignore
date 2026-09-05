@@ -1,0 +1,13 @@
+.git
+.venv
+data/
+docs/generated/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.env
+._*
+.DS_Store
+*.duckdb
+*.docx

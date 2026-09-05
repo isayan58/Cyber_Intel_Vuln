@@ -94,28 +94,51 @@ def _scoring_cases(cases: list[dict[str, Any]], rows: list[dict[str, Any]]) -> d
 
         if "expect_score_between" in case:
             low, high = case["expect_score_between"]
-            rows.append(_row(case["id"], "score-range", f"{low}–{high}",
-                             f"{result.score:.1f}", low <= result.score <= high))
+            rows.append(
+                _row(
+                    case["id"],
+                    "score-range",
+                    f"{low}–{high}",
+                    f"{result.score:.1f}",
+                    low <= result.score <= high,
+                )
+            )
 
         if "expect_band" in case:
             expected = case["expect_band"]
             expected = expected if isinstance(expected, list) else [expected]
-            rows.append(_row(case["id"], "band", "/".join(expected),
-                             result.band, result.band in expected))
+            rows.append(
+                _row(case["id"], "band", "/".join(expected), result.band, result.band in expected)
+            )
 
         if "expect_sla_days" in case:
-            rows.append(_row(case["id"], "sla-days", case["expect_sla_days"],
-                             result.sla.days, result.sla.days == case["expect_sla_days"]))
+            rows.append(
+                _row(
+                    case["id"],
+                    "sla-days",
+                    case["expect_sla_days"],
+                    result.sla.days,
+                    result.sla.days == case["expect_sla_days"],
+                )
+            )
 
         if "expect_sla_rule" in case:
-            rows.append(_row(case["id"], "sla-rule", case["expect_sla_rule"],
-                             result.sla.rule_id, result.sla.rule_id == case["expect_sla_rule"]))
+            rows.append(
+                _row(
+                    case["id"],
+                    "sla-rule",
+                    case["expect_sla_rule"],
+                    result.sla.rule_id,
+                    result.sla.rule_id == case["expect_sla_rule"],
+                )
+            )
 
         if "expect_note_contains" in case:
             needle = case["expect_note_contains"].lower()
             found = any(needle in note.lower() for note in result.notes)
-            rows.append(_row(case["id"], "note", needle,
-                             "; ".join(result.notes)[:50] or "(none)", found))
+            rows.append(
+                _row(case["id"], "note", needle, "; ".join(result.notes)[:50] or "(none)", found)
+            )
 
     return scores
 
@@ -149,8 +172,15 @@ def _version_cases(cases: list[dict[str, Any]], rows: list[dict[str, Any]]) -> N
             last_affected=case.get("last_affected"),
             ecosystem=case.get("ecosystem"),
         )
-        rows.append(_row(case["id"], "osv-range", case["expect"],
-                         result.verdict.value, result.verdict.value == case["expect"]))
+        rows.append(
+            _row(
+                case["id"],
+                "osv-range",
+                case["expect"],
+                result.verdict.value,
+                result.verdict.value == case["expect"],
+            )
+        )
 
 
 def _cpe_cases(cases: list[dict[str, Any]], rows: list[dict[str, Any]]) -> None:
@@ -162,8 +192,15 @@ def _cpe_cases(cases: list[dict[str, Any]], rows: list[dict[str, Any]]) -> None:
             version_end_including=case.get("end_including"),
             version_end_excluding=case.get("end_excluding"),
         )
-        rows.append(_row(case["id"], "cpe-range", case["expect"],
-                         result.verdict.value, result.verdict.value == case["expect"]))
+        rows.append(
+            _row(
+                case["id"],
+                "cpe-range",
+                case["expect"],
+                result.verdict.value,
+                result.verdict.value == case["expect"],
+            )
+        )
 
 
 def _property_cases(rows: list[dict[str, Any]]) -> None:
@@ -179,70 +216,144 @@ def _property_cases(rows: list[dict[str, Any]]) -> None:
 
     # 2. Scoring is reproducible — same inputs, same score, every time.
     sample = ScoreInput(
-        finding_id=1, cvss_base=7.7, epss=0.31, kev=True,
-        business_criticality="high", environment="production",
-        internet_facing=True, data_classification="confidential",
+        finding_id=1,
+        cvss_base=7.7,
+        epss=0.31,
+        kev=True,
+        business_criticality="high",
+        environment="production",
+        internet_facing=True,
+        data_classification="confidential",
     )
     values = {RiskScorer(today=TODAY).score(sample).score for _ in range(25)}
-    rows.append(_row("score-reproducible", "property", "1 distinct value",
-                     f"{len(values)} distinct", len(values) == 1))
+    rows.append(
+        _row(
+            "score-reproducible",
+            "property",
+            "1 distinct value",
+            f"{len(values)} distinct",
+            len(values) == 1,
+        )
+    )
 
     # 3. Monotonic in CVSS: raising severity alone never lowers the score.
     scorer = RiskScorer(today=TODAY)
     series = [
         scorer.score(
-            ScoreInput(finding_id=1, cvss_base=cvss, epss=0.1, kev=False,
-                       business_criticality="high", environment="production")
+            ScoreInput(
+                finding_id=1,
+                cvss_base=cvss,
+                epss=0.1,
+                kev=False,
+                business_criticality="high",
+                environment="production",
+            )
         ).score
         for cvss in (2.0, 5.0, 7.5, 9.8)
     ]
-    rows.append(_row("monotonic-in-cvss", "property", "non-decreasing",
-                     " ≤ ".join(f"{s:.1f}" for s in series),
-                     all(a <= b for a, b in zip(series, series[1:], strict=False))))
+    rows.append(
+        _row(
+            "monotonic-in-cvss",
+            "property",
+            "non-decreasing",
+            " ≤ ".join(f"{s:.1f}" for s in series),
+            all(a <= b for a, b in zip(series, series[1:], strict=False)),
+        )
+    )
 
     # 4. Monotonic in EPSS.
     series = [
         scorer.score(
-            ScoreInput(finding_id=1, cvss_base=7.0, epss=epss, kev=False,
-                       business_criticality="high", environment="production")
+            ScoreInput(
+                finding_id=1,
+                cvss_base=7.0,
+                epss=epss,
+                kev=False,
+                business_criticality="high",
+                environment="production",
+            )
         ).score
         for epss in (0.0, 0.1, 0.5, 0.99)
     ]
-    rows.append(_row("monotonic-in-epss", "property", "non-decreasing",
-                     " ≤ ".join(f"{s:.1f}" for s in series),
-                     all(a <= b for a, b in zip(series, series[1:], strict=False))))
+    rows.append(
+        _row(
+            "monotonic-in-epss",
+            "property",
+            "non-decreasing",
+            " ≤ ".join(f"{s:.1f}" for s in series),
+            all(a <= b for a, b in zip(series, series[1:], strict=False)),
+        )
+    )
 
     # 5. KEV always raises the score, never lowers it.
-    base = ScoreInput(finding_id=1, cvss_base=6.0, epss=0.05, kev=False,
-                      business_criticality="medium", environment="production")
+    base = ScoreInput(
+        finding_id=1,
+        cvss_base=6.0,
+        epss=0.05,
+        kev=False,
+        business_criticality="medium",
+        environment="production",
+    )
     with_kev = ScoreInput(**{**base.__dict__, "kev": True})
     without = scorer.score(base).score
     withk = scorer.score(with_kev).score
-    rows.append(_row("kev-raises-score", "property", "kev ≥ no-kev",
-                     f"{withk:.1f} vs {without:.1f}", withk > without))
+    rows.append(
+        _row(
+            "kev-raises-score",
+            "property",
+            "kev ≥ no-kev",
+            f"{withk:.1f} vs {without:.1f}",
+            withk > without,
+        )
+    )
 
     # 6. Bounded to 0–100 across the extremes.
     extremes = [
-        ScoreInput(finding_id=1, cvss_base=0.0, epss=0.0, kev=False,
-                   business_criticality="low", environment="development",
-                   data_classification="public"),
-        ScoreInput(finding_id=1, cvss_base=10.0, epss=1.0, kev=True,
-                   business_criticality="critical", environment="production",
-                   internet_facing=True, data_classification="restricted"),
+        ScoreInput(
+            finding_id=1,
+            cvss_base=0.0,
+            epss=0.0,
+            kev=False,
+            business_criticality="low",
+            environment="development",
+            data_classification="public",
+        ),
+        ScoreInput(
+            finding_id=1,
+            cvss_base=10.0,
+            epss=1.0,
+            kev=True,
+            business_criticality="critical",
+            environment="production",
+            internet_facing=True,
+            data_classification="restricted",
+        ),
     ]
     values = [scorer.score(e).score for e in extremes]
-    rows.append(_row("score-bounded", "property", "0 ≤ s ≤ 100",
-                     " / ".join(f"{v:.1f}" for v in values),
-                     all(0.0 <= v <= 100.0 for v in values)))
+    rows.append(
+        _row(
+            "score-bounded",
+            "property",
+            "0 ≤ s ≤ 100",
+            " / ".join(f"{v:.1f}" for v in values),
+            all(0.0 <= v <= 100.0 for v in values),
+        )
+    )
 
     # 7. An unparseable version is never reported as affected.
     verdicts = [
         in_osv_range("not-a-version", introduced="0", fixed="1.0", ecosystem="PyPI").verdict,
         in_cpe_range("nightly", version_end_excluding="2.0").verdict,
     ]
-    rows.append(_row("unparseable-never-affected", "property", "never affected",
-                     "/".join(v.value for v in verdicts),
-                     all(v is not Verdict.AFFECTED for v in verdicts)))
+    rows.append(
+        _row(
+            "unparseable-never-affected",
+            "property",
+            "never affected",
+            "/".join(v.value for v in verdicts),
+            all(v is not Verdict.AFFECTED for v in verdicts),
+        )
+    )
 
 
 def _row(case_id: str, kind: str, expected: Any, actual: Any, passed: bool) -> dict[str, Any]:

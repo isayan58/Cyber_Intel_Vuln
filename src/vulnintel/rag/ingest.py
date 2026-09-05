@@ -65,7 +65,9 @@ def ingest_knowledge_base(
     paths = discover_documents(root)
 
     if not paths:
-        log.warning("no knowledge-base documents found under %s", root or get_settings().knowledge_dir)
+        log.warning(
+            "no knowledge-base documents found under %s", root or get_settings().knowledge_dir
+        )
         return {"documents": 0, "chunks": 0, "embeddings": 0}
 
     now = datetime.now(UTC).replace(tzinfo=None)
@@ -148,9 +150,7 @@ def ingest_knowledge_base(
     return summary
 
 
-def reembed(
-    db: Database | None = None, provider: EmbeddingProvider | None = None
-) -> int:
+def reembed(db: Database | None = None, provider: EmbeddingProvider | None = None) -> int:
     """Recompute embeddings for existing chunks with a different provider."""
     db = db or get_db()
     provider = provider or get_embedding_provider()
@@ -160,8 +160,10 @@ def reembed(
         return 0
 
     vectors = provider.embed([r["text"] for r in rows])
-    db.execute("DELETE FROM kb_chunk_embedding WHERE provider = ?", [provider.name])
-    db.insert_many(
+    # Upsert on the full key rather than delete-then-insert: re-embedding with
+    # one provider must leave the other provider's vectors untouched, which is
+    # what makes an A/B between them possible without a rebuild.
+    db.upsert(
         "kb_chunk_embedding",
         [
             {
@@ -172,6 +174,7 @@ def reembed(
             }
             for index, row in enumerate(rows)
         ],
+        key_columns=("chunk_id", "provider"),
     )
     log.info("re-embedded %d chunks with '%s'", len(rows), provider.name)
     return len(rows)
