@@ -53,16 +53,21 @@ P1 = {
 CLEAN = {"latency_s": 165, "cost": 0.5087}
 # Phase 2: Sonnet mid tier, critic gated on deterministic outcome, payloads
 # trimmed, responder moved to the fast tier.
-OPT = {"latency_s": 87, "cost": 0.0938}
+# Re-measured after the token-accounting fix in 7.4: the earlier $0.0938 omitted
+# the responder and the critic entirely. Suite average over the five end-to-end
+# scenarios; the spread is $0.008 (a policy-only question) to $0.163 (the CTO
+# brief, which runs every node).
+OPT = {"latency_s": 102, "cost": 0.0920}
+# The CTO brief, the scenario comparable to the baseline run: every node fires.
 NODES_FINAL = [
-    ("supervisor", "fast", 1_903, 221, 0.0030),
-    ("asset_exposure", "fast", 9_592, 529, 0.0122),
-    ("policy_rag", "fast", 3_783, 1_208, 0.0098),
-    ("threat_intel", "fast", 3_112, 1_214, 0.0092),
-    ("vulnerability_intel", "-", 0, 0, 0.0),
-    ("risk_remediation", "mid", 9_707, 2_650, 0.0459),
-    ("critic", "gated", 0, 0, 0.0),
-    ("responder", "fast", 5_224, 1_683, 0.0136),
+    ("supervisor", "fast", 1_887, 236, 0.0031),
+    ("asset_exposure", "fast", 9_965, 615, 0.0130),
+    ("policy_rag", "fast", 4_025, 1_334, 0.0107),
+    ("threat_intel", "fast", 4_617, 1_539, 0.0123),
+    ("vulnerability_intel", "fast", 11_283, 2_698, 0.0248),
+    ("risk_remediation", "mid", 13_115, 2_486, 0.0513),
+    ("critic", "gated", 0, 0, 0.0000),
+    ("responder", "mid", 9_919, 2_791, 0.0478),
 ]
 
 
@@ -752,16 +757,20 @@ def build() -> Path:
     )
     callout(
         doc,
-        "Prompt caching has never engaged.",
-        "Every system block is sent with cache_control and a 1h TTL, and the report "
-        "credited it as a cost optimisation. Measured against the live API, the cache "
-        "tokens on every span are zero: the API will not cache a block below 1024 tokens "
-        "(2048 on Haiku), and every shipped prompt is 400-855 tokens. The directive was "
-        "accepted and silently ignored. It is left in place because it costs nothing and "
-        "begins working if a prompt grows past the threshold, but it is not today a "
-        "saving. What dominates input cost is the evidence payload in the user message, "
-        "which differs per question and is not shared between runs - so the trimming in "
-        "3.5 was doing the work the cache was being credited for.",
+        "Prompt caching engages on one node out of eight.",
+        "Every system block is sent with cache_control and a 1h TTL, and this report "
+        "credited it as a cost optimisation. Measured across a five-scenario live suite: "
+        "3,789 cached input tokens against 152,363 uncached - 2.4%, all of it on "
+        "risk_remediation. The API will not cache a prefix below 1,024 tokens, or 2,048 on "
+        "Haiku, and every shipped system prompt is 400-855 tokens; only risk_remediation "
+        "crosses the line, because its output schema is counted in the cacheable prefix, "
+        "and only because it sits on the Sonnet tier with the lower threshold. The five "
+        "fast-tier nodes need 2,048 and never come close. The directive was accepted and "
+        "almost entirely ignored. It is left in place because it costs nothing, but a 2.4% "
+        "input saving is a rounding error next to the payload trimming in 3.5, which was "
+        "doing the work the cache was being credited for. The 3,484 cache-read tokens "
+        "recorded for phase 1 in this document's own constants could not be reproduced and "
+        "should be treated as unverified.",
         "FFF6E8",
     )
     callout(
