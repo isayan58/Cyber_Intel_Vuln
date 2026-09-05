@@ -13,6 +13,7 @@ Results are persisted to ``eval_result`` so trends are queryable.
 
 from __future__ import annotations
 
+import inspect
 import json
 import uuid
 from datetime import UTC, datetime
@@ -25,9 +26,14 @@ log = get_logger(__name__)
 SUITES = ("retrieval", "risk", "tools", "end_to_end")
 
 
-def run_suite(suite: str, limit: int | None = None, persist: bool = True) -> dict[str, Any]:
+def run_suite(
+    suite: str,
+    limit: int | None = None,
+    persist: bool = True,
+    provider: str | None = None,
+) -> dict[str, Any]:
     if suite == "all":
-        return _run_all(limit=limit, persist=persist)
+        return _run_all(limit=limit, persist=persist, provider=provider)
 
     if suite == "retrieval":
         from vulnintel.evaluation import retrieval_eval as module
@@ -40,20 +46,23 @@ def run_suite(suite: str, limit: int | None = None, persist: bool = True) -> dic
     else:
         raise ValueError(f"unknown suite: {suite}")
 
-    result = module.run(limit=limit)
+    kwargs: dict[str, Any] = {"limit": limit}
+    if provider is not None and "provider" in inspect.signature(module.run).parameters:
+        kwargs["provider"] = provider
+    result = module.run(**kwargs)
     if persist:
         _persist(suite, result)
     return result
 
 
-def _run_all(limit: int | None, persist: bool) -> dict[str, Any]:
+def _run_all(limit: int | None, persist: bool, provider: str | None = None) -> dict[str, Any]:
     cases: list[dict[str, Any]] = []
     summary: dict[str, Any] = {}
     all_passed = True
 
     for suite in SUITES:
         try:
-            result = run_suite(suite, limit=limit, persist=persist)
+            result = run_suite(suite, limit=limit, persist=persist, provider=provider)
         except Exception as exc:  # noqa: BLE001 - one suite failing must not hide the rest
             log.warning("suite '%s' failed to run: %s", suite, exc)
             summary[f"{suite}.error"] = str(exc)

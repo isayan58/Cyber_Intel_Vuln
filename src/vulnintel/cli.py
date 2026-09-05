@@ -358,7 +358,7 @@ def cmd_ask(args: argparse.Namespace) -> int:
 def cmd_eval(args: argparse.Namespace) -> int:
     from vulnintel.evaluation import run_suite
 
-    results = run_suite(args.suite, limit=args.limit)
+    results = run_suite(args.suite, limit=args.limit, provider=args.provider)
     _heading(f"{args.suite} evaluation")
     print(_table(results["cases"], results["columns"]))
     _heading("Summary")
@@ -487,6 +487,12 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("eval", help="run an evaluation suite")
     p.add_argument("suite", choices=["retrieval", "risk", "tools", "end_to_end", "all"])
     p.add_argument("--limit", type=int, default=None)
+    p.add_argument(
+        "--provider",
+        choices=["anthropic", "mock"],
+        default=None,
+        help="override the configured provider; the default runs against the live model",
+    )
     p.set_defaults(func=cmd_eval)
 
     p = sub.add_parser("serve", help="run the API and UI")

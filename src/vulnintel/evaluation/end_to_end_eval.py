@@ -17,6 +17,7 @@ import contextlib
 import re
 from typing import Any
 
+from vulnintel.config import get_settings
 from vulnintel.llm import build_provider, get_provider, set_provider
 from vulnintel.logging_setup import get_logger
 
@@ -64,13 +65,22 @@ SCORE_RE = re.compile(r"\b(\d{1,3}(?:\.\d+)?)\s*/\s*100\b")
 CVE_RE = re.compile(r"\bCVE-\d{4}-\d{4,7}\b")
 
 
-def run(limit: int | None = None, provider: str = "mock") -> dict[str, Any]:
+def run(limit: int | None = None, provider: str | None = None) -> dict[str, Any]:
+    """Run the workflow suite.
+
+    ``provider`` defaults to the configured one, which is the live model. The
+    mock cannot extract entities or choose a plan, so a green mock run says the
+    graph is wired correctly and nothing about whether the system reasons — the
+    two failures this suite exists to catch (a fabricated CVE, a plan missing
+    the agent that makes the answer possible) are only reachable live.
+    """
     from vulnintel.graph import run_investigation
 
     original = None
     with contextlib.suppress(Exception):  # no provider configured yet
         original = get_provider()
 
+    provider = provider or get_settings().llm_provider
     set_provider(build_provider(provider))
     rows: list[dict[str, Any]] = []
 
