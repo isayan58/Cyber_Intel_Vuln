@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONPATH: src:apps
+  # No network and no API key in CI: the mock provider makes the whole graph,
+  # the MCP servers and the evaluation suites runnable offline and deterministic.
+  VULNINTEL_LLM_PROVIDER: mock
+  VULNINTEL_EMBEDDING_PROVIDER: hash
+
+jobs:
+  quality:
+    name: Lint and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,docs]"
+
+      - name: Lint
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Tests
+        run: pytest --cov --cov-report=term-missing
+
+      - name: Deterministic evaluation suites
+        # risk and tools need no model, no network and no ingested feeds, so a
+        # regression in the scoring or tool layer fails the build outright.
+        run: |
+          python -m vulnintel.cli db init
+          python -m vulnintel.cli eval risk
+          python -m vulnintel.cli eval tools
+
+      - name: Retrieval evaluation
+        run: |
+          python -m vulnintel.cli generate --assets 200 --applications 12
+          python -m vulnintel.cli rag build
+          python -m vulnintel.cli eval retrieval
+
+      - name: End-to-end graph
+        run: python -m vulnintel.cli eval end_to_end
+
+  mcp:
+    name: MCP servers speak the protocol
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+      - name: Handshake over stdio
+        run: |
+          python -m vulnintel.cli db init
+          python -m vulnintel.mcp_servers.client_demo
+
+  docker:
+    name: Image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: vulnintel-ai:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Container serves health
+        run: |
+          docker run -d --name vi -p 8000:8000 \
+            -e VULNINTEL_DB_BACKEND=duckdb -e VULNINTEL_LLM_PROVIDER=mock vulnintel-ai:ci
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/api/health > /dev/null; then
+              echo "healthy"; docker rm -f vi; exit 0
+            fi
+            sleep 2
+          done
+          echo "never became healthy"; docker logs vi; docker rm -f vi; exit 1
