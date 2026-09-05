@@ -19,6 +19,7 @@ from typing import Any
 from vulnintel.data.db import Database, get_db
 from vulnintel.logging_setup import get_logger
 from vulnintel.risk.versions import (
+    RangeResult,
     Verdict,
     in_cpe_range,
     in_osv_range,
@@ -31,6 +32,10 @@ log = get_logger(__name__)
 # product accumulates tens of thousands of ranges over its lifetime; the
 # version comparison only needs enough to find a match.
 MAX_CPE_CANDIDATES = 400
+
+# How much more prolific the leading vendor must be before it is treated as
+# the canonical publisher of a product name rather than one of several.
+DOMINANT_VENDOR_RATIO = 3.0
 
 
 def build_purl(ecosystem: str, name: str, version: str | None = None) -> str:
@@ -225,12 +230,14 @@ class FindingMatcher:
         # the vendor-keyed index per inventory row is quadratic — roughly six
         # billion dict visits against a real NVD corpus — and never completes.
         by_vendor_product: dict[tuple[str, str], list[dict[str, Any]]] = {}
-        by_product_only: dict[str, list[dict[str, Any]]] = {}
+        vendors_per_product: dict[str, dict[str, set[str]]] = {}
         for row in matches:
             vendor = (row["cpe_vendor"] or "").lower()
             product = (row["cpe_product"] or "").lower()
             by_vendor_product.setdefault((vendor, product), []).append(row)
-            by_product_only.setdefault(product, []).append(row)
+            vendors_per_product.setdefault(product, {}).setdefault(vendor, set()).add(
+                row["cve_id"]
+            )
 
         findings: list[dict[str, Any]] = []
         for item in inventory:
@@ -238,13 +245,16 @@ class FindingMatcher:
             product = (item.get("product") or "").lower().replace(" ", "_")
 
             candidates = by_vendor_product.get((vendor, product))
+            ambiguous_vendor = False
             if candidates:
                 confidence = float(item.get("cpe23_confidence") or 0.9)
             else:
-                # Product name matched but vendor did not: usable, but the
-                # mapping is weaker and the finding says so.
-                candidates = by_product_only.get(product, [])
-                confidence = 0.6
+                resolved, confidence, ambiguous_vendor = _resolve_vendor(
+                    product, vendors_per_product.get(product, {})
+                )
+                candidates = (
+                    by_vendor_product.get((resolved, product), []) if resolved else []
+                )
 
             # A single popular product can carry tens of thousands of CPE
             # ranges across its whole history. Comparing every one against one
@@ -291,6 +301,43 @@ class FindingMatcher:
         return findings
 
 
+
+
+def _resolve_vendor(
+    product: str, vendors: dict[str, set[str]]
+) -> tuple[str | None, float, bool]:
+    """Pick which vendor's ranges apply when inventory names no usable vendor.
+
+    Product names are not unique in NVD. "http_server" is published by eleven
+    vendors including Apache, Oracle and IBM; "mongodb" by MongoDB, Jenkins (a
+    plugin) and anynines. Matching an installed version against every vendor's
+    ranges manufactures findings for software the organisation does not run.
+
+    Returns ``(vendor, confidence, ambiguous)``. Resolution order:
+
+      1. a vendor with the same name as the product — the dominant CPE
+         convention for first-party software (openssl/openssl, redis/redis)
+      2. the only vendor, when there is exactly one
+      3. the vendor with by far the most CVEs for that product, treated as the
+         canonical publisher
+      4. otherwise the largest, flagged ambiguous so the verdict is reported
+         as unconfirmed rather than affected
+    """
+    if not vendors:
+        return None, 0.0, False
+
+    if product in vendors:
+        return product, 0.75, False
+
+    ranked = sorted(vendors.items(), key=lambda kv: len(kv[1]), reverse=True)
+    if len(ranked) == 1:
+        return ranked[0][0], 0.7, False
+
+    top, runner_up = len(ranked[0][1]), len(ranked[1][1])
+    if top >= runner_up * DOMINANT_VENDOR_RATIO:
+        return ranked[0][0], 0.6, False
+
+    return ranked[0][0], 0.35, True
 
 def _collapse(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """One finding per (asset, distinct vulnerability).

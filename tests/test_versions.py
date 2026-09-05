@@ -223,3 +223,56 @@ class TestCollapseIdentity:
             dict(self._rows()[0], advisory_id="GHSA-x", version_verdict="affected"),
         ]
         assert _collapse(rows)[0]["version_verdict"] == "affected"
+
+
+class TestVendorResolution:
+    """Product names are not unique in NVD.
+
+    Eleven vendors publish something called "http_server"; Jenkins ships a
+    plugin named "mongodb". Matching an installed version against every
+    vendor's ranges invents findings for software the organisation does not run.
+    """
+
+    def test_vendor_matching_the_product_name_wins(self):
+        from vulnintel.risk.matching import _resolve_vendor
+
+        vendor, confidence, ambiguous = _resolve_vendor(
+            "mongodb",
+            {"mongodb": set(range(136)), "jenkins": {"a", "b"}, "anynines": {"c"}},
+        )
+        assert vendor == "mongodb"
+        assert not ambiguous
+        assert confidence >= 0.7
+
+    def test_sole_vendor_is_used_directly(self):
+        from vulnintel.risk.matching import _resolve_vendor
+
+        vendor, _, ambiguous = _resolve_vendor("thing", {"acme": {"a"}})
+        assert vendor == "acme"
+        assert not ambiguous
+
+    def test_dominant_publisher_is_treated_as_canonical(self):
+        from vulnintel.risk.matching import _resolve_vendor
+
+        vendor, _, ambiguous = _resolve_vendor(
+            "http_server",
+            {"apache": set(range(351)), "oracle": set(range(112)), "ibm": set(range(22))},
+        )
+        assert vendor == "apache"
+        assert not ambiguous
+
+    def test_close_rivals_are_flagged_ambiguous(self):
+        """Two comparable vendors means we cannot tell whose software this is."""
+        from vulnintel.risk.matching import _resolve_vendor
+
+        vendor, confidence, ambiguous = _resolve_vendor(
+            "widget", {"acme": set(range(10)), "globex": set(range(9))}
+        )
+        assert ambiguous
+        assert confidence < 0.5
+        assert vendor == "acme"
+
+    def test_no_vendors_resolves_to_nothing(self):
+        from vulnintel.risk.matching import _resolve_vendor
+
+        assert _resolve_vendor("ghost", {}) == (None, 0.0, False)
