@@ -154,7 +154,6 @@ _FIELD_DEFAULTS: dict[str, Any] = {
     "retained_mappings": [],
     "staleness_warnings": [],
     "result_limit": 5,
-    "advisory_ids": [],
     "application_names": [],
     "asset_hostnames": [],
     "products": [],
