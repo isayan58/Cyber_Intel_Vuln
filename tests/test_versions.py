@@ -166,3 +166,60 @@ class TestLowestFix:
 
     def test_returns_none_when_nothing_usable(self):
         assert lowest_fix(["", None, "*"]) is None
+
+
+class TestCollapseIdentity:
+    """Two advisories sharing a CVE alias are two vulnerabilities, not one.
+
+    lodash CVE-2021-23337 aliases GHSA-35jh-r3h4-6jhm (fixed 4.17.21) and
+    GHSA-r5fr-rjxr-66jc (fixed 4.18.0). Merging them and reporting the lower
+    fix tells an owner that 4.17.21 is sufficient when it is not.
+    """
+
+    def _rows(self):
+        return [
+            {"asset_id": "A1", "cve_id": "CVE-2021-23337", "advisory_id": "GHSA-35jh-r3h4-6jhm",
+             "match_path": "purl", "match_confidence": 1.0, "scanner_confidence": 0.95,
+             "version_verdict": "affected", "fixed_version": "4.17.21"},
+            {"asset_id": "A1", "cve_id": "CVE-2021-23337", "advisory_id": "GHSA-r5fr-rjxr-66jc",
+             "match_path": "purl", "match_confidence": 1.0, "scanner_confidence": 0.95,
+             "version_verdict": "affected", "fixed_version": "4.18.0"},
+        ]
+
+    def test_distinct_advisories_are_not_merged(self):
+        from vulnintel.risk.matching import _collapse
+
+        assert len(_collapse(self._rows())) == 2
+
+    def test_same_advisory_by_two_routes_is_merged(self):
+        from vulnintel.risk.matching import _collapse
+
+        rows = [
+            dict(self._rows()[0]),
+            dict(self._rows()[0], match_path="cpe", match_confidence=0.6,
+                 fixed_version="4.17.21"),
+        ]
+        collapsed = _collapse(rows)
+        assert len(collapsed) == 1
+        assert collapsed[0]["evidence_count"] == 2
+        assert collapsed[0]["match_confidence"] == 1.0
+
+    def test_merged_fix_clears_every_issue_folded_in(self):
+        from vulnintel.risk.matching import _collapse
+
+        rows = [
+            dict(self._rows()[0], advisory_id="GHSA-same", fixed_version="4.17.21"),
+            dict(self._rows()[0], advisory_id="GHSA-same", fixed_version="4.18.0"),
+        ]
+        collapsed = _collapse(rows)
+        assert len(collapsed) == 1
+        assert collapsed[0]["fixed_version"] == "4.18.0", "must clear both, not the cheaper one"
+
+    def test_affected_beats_unknown(self):
+        from vulnintel.risk.matching import _collapse
+
+        rows = [
+            dict(self._rows()[0], advisory_id="GHSA-x", version_verdict="unknown"),
+            dict(self._rows()[0], advisory_id="GHSA-x", version_verdict="affected"),
+        ]
+        assert _collapse(rows)[0]["version_verdict"] == "affected"

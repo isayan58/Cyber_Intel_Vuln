@@ -289,7 +289,13 @@ CREATE TABLE IF NOT EXISTS vulnerability_finding (
     first_seen          TIMESTAMP,
     last_seen           TIMESTAMP,
     status              VARCHAR,            -- open | remediated | risk_accepted
-    scanner_confidence  DOUBLE
+    scanner_confidence  DOUBLE,
+    -- How many raw advisory/range matches collapsed into this finding, and
+    -- which sources agreed. One asset plus one vulnerability is one row;
+    -- without that, the same issue is counted several times and the two
+    -- rows can disagree on the upgrade target.
+    evidence_count      INTEGER,
+    match_paths         VARCHAR
 );
 
 CREATE TABLE IF NOT EXISTS risk_acceptances (
