@@ -152,9 +152,7 @@ def chunk_document(
 
     for section_path, heading, text in _sections(document.body):
         pieces = (
-            [text]
-            if estimate_tokens(text) <= target
-            else _split_oversized(text, target, overlap)
+            [text] if estimate_tokens(text) <= target else _split_oversized(text, target, overlap)
         )
         for piece in pieces:
             # Prefixing the heading path keeps a chunk self-describing, which

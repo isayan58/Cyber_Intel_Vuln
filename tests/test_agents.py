@@ -99,8 +99,10 @@ class TestSupervisorPlanValidation:
     def test_invented_entities_are_normalised_not_trusted(self):
         agent = SupervisorAgent(persist=False)
         plan = agent._validate(
-            {"intent": "cve_investigation",
-             "entities": {"cve_ids": ["cve-2021-44228", "  "], "products": ["Django"]}},
+            {
+                "intent": "cve_investigation",
+                "entities": {"cve_ids": ["cve-2021-44228", "  "], "products": ["Django"]},
+            },
             {"question": "x", "user_role": "analyst"},
         )
         assert plan["entities"]["cve_ids"] == ["CVE-2021-44228"]

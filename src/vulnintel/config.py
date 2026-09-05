@@ -85,8 +85,8 @@ class Settings(BaseSettings):
     # on authentication for every endpoint except health and static assets.
     api_key: str = ""
     rate_limit_enabled: bool = True
-    rate_limit_default: int = 120      # requests per minute, read endpoints
-    rate_limit_expensive: int = 6      # requests per minute, endpoints that call a model
+    rate_limit_default: int = 120  # requests per minute, read endpoints
+    rate_limit_expensive: int = 6  # requests per minute, endpoints that call a model
 
     # --- misc ----------------------------------------------------------------
     log_level: str = "INFO"

@@ -90,12 +90,25 @@ ignore = [
     "RUF002",
     "RUF003",
     "N818",    # exception names read better without the Error suffix here
+    # zip(xs, xs[1:]) states "compare each element with the next" more plainly
+    # than itertools.pairwise for readers who are not Python specialists, and
+    # every use here is a monotonicity assertion where clarity matters most.
+    "RUF007",
+    # Verdict is a str-Enum on purpose: it is persisted to the database and
+    # compared against strings from SQL, so the str mixin is load-bearing.
+    "UP042",
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101", "SLF001"]        # asserts and private access are the point
 "scripts/*" = ["E402"]                 # sys.path is set before the imports
 "src/vulnintel/cli.py" = ["PLC0415"]   # imports are deferred to keep startup fast
+# The CPE ordinal tracks position within a nested configuration tree, not the
+# loop index, so enumerate() would silently change what is recorded.
+"src/vulnintel/ingest/nvd.py" = ["SIM113"]
+# _TOKEN is a compiled pattern shared by every instance; it is immutable in
+# practice and recompiling it per instance would be wasteful.
+"src/vulnintel/risk/versions.py" = ["RUF012"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["vulnintel"]

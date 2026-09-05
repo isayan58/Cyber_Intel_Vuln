@@ -14,8 +14,10 @@ from vulnintel.llm.anthropic_provider import sanitise_schema
 class TestSanitiseSchema:
     def test_strips_numeric_bounds(self):
         cleaned = sanitise_schema(
-            {"type": "object",
-             "properties": {"confidence": {"type": "number", "minimum": 0, "maximum": 1}}}
+            {
+                "type": "object",
+                "properties": {"confidence": {"type": "number", "minimum": 0, "maximum": 1}},
+            }
         )
         assert cleaned["properties"]["confidence"] == {"type": "number"}
 
@@ -30,18 +32,20 @@ class TestSanitiseSchema:
         assert cleaned["minItems"] == 2
 
     def test_recurses_into_nested_structures(self):
-        cleaned = sanitise_schema({
-            "type": "object",
-            "properties": {
-                "gaps": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {"weight": {"type": "number", "minimum": 0}},
-                    },
-                }
-            },
-        })
+        cleaned = sanitise_schema(
+            {
+                "type": "object",
+                "properties": {
+                    "gaps": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {"weight": {"type": "number", "minimum": 0}},
+                        },
+                    }
+                },
+            }
+        )
         assert "minimum" not in cleaned["properties"]["gaps"]["items"]["properties"]["weight"]
 
     def test_preserves_enum_required_and_additional_properties(self):

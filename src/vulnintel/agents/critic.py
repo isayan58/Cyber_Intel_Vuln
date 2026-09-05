@@ -163,10 +163,7 @@ class CriticAgent(Agent):
         findings = risk.get("findings") or []
 
         # 1. Every reported finding must have a deterministic 'affected' verdict.
-        bad_verdicts = [
-            f for f in findings
-            if f.get("version_verdict") not in (None, "affected")
-        ]
+        bad_verdicts = [f for f in findings if f.get("version_verdict") not in (None, "affected")]
         checks.append(
             {
                 "name": "all_reported_findings_are_affected",
@@ -274,8 +271,14 @@ class CriticAgent(Agent):
                 continue
             entry: dict[str, Any] = {}
             for key in (
-                "interpretation", "aggregates", "signals_summary", "conflicts",
-                "citations", "staleness", "injection_flags", "score_explanations",
+                "interpretation",
+                "aggregates",
+                "signals_summary",
+                "conflicts",
+                "citations",
+                "staleness",
+                "injection_flags",
+                "score_explanations",
                 "sla_rules",
             ):
                 if payload.get(key):
@@ -289,11 +292,22 @@ class CriticAgent(Agent):
                     {
                         k: f.get(k)
                         for k in (
-                            "finding_id", "cve_id", "hostname", "application_name",
-                            "product", "asset_count", "application_count",
-                            "score", "kev_listed", "epss", "version_verdict",
-                            "installed_version", "fixed_version", "sla_due_date",
-                            "sla_breached", "top_assets",
+                            "finding_id",
+                            "cve_id",
+                            "hostname",
+                            "application_name",
+                            "product",
+                            "asset_count",
+                            "application_count",
+                            "score",
+                            "kev_listed",
+                            "epss",
+                            "version_verdict",
+                            "installed_version",
+                            "fixed_version",
+                            "sla_due_date",
+                            "sla_breached",
+                            "top_assets",
                         )
                         if k in f
                     }

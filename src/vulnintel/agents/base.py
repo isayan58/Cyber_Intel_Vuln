@@ -86,7 +86,10 @@ class Agent(abc.ABC):
                 log.exception("%s: model interpretation raised", self.name)
                 result.errors.append(f"{self.name} interpretation: {exc}")
 
-        result.output = {**gathered, **({"interpretation": interpretation} if interpretation else {})}
+        result.output = {
+            **gathered,
+            **({"interpretation": interpretation} if interpretation else {}),
+        }
         result.span = {
             "span_id": self.span_id,
             "node": self.name,
@@ -114,9 +117,7 @@ class Agent(abc.ABC):
 
     # -- helpers --------------------------------------------------------------
 
-    def _ask_structured(
-        self, result: AgentResult, **variables: Any
-    ) -> dict[str, Any]:
+    def _ask_structured(self, result: AgentResult, **variables: Any) -> dict[str, Any]:
         """Run this agent's prompt with its declared output schema."""
         prompt = get_prompt(self.prompt_name)  # type: ignore[arg-type]
         result.prompt_version = prompt.label
@@ -170,8 +171,7 @@ def as_json(value: Any, limit: int = 24000) -> str:
     if len(text) <= limit:
         return text
     return (
-        text[:limit]
-        + f"\n\n... [TRUNCATED: {len(text) - limit} more characters were omitted. "
+        text[:limit] + f"\n\n... [TRUNCATED: {len(text) - limit} more characters were omitted. "
         "Counts stated in the aggregates above remain authoritative; do not infer "
         "totals from the rows shown here.]"
     )

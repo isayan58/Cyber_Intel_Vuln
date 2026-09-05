@@ -58,9 +58,7 @@ class AssetExposureAgent(Agent):
         # so derive the currently top-ranked CVEs and resolve *their* blast
         # radius. Without this the asset agent contributes no asset context to
         # the single most important question the platform answers.
-        if not any(
-            (evidence["by_cve"], evidence["by_application"], evidence["by_product"])
-        ):
+        if not any((evidence["by_cve"], evidence["by_application"], evidence["by_product"])):
             for cve_id in self._top_ranked_cves(limit=state.get("result_limit", 5)):
                 evidence["by_cve"][cve_id] = self.tools.call(
                     "get_findings_for_cve", cve_id=cve_id, only_affected=False, limit=200
@@ -102,11 +100,13 @@ class AssetExposureAgent(Agent):
         result = super().run(state)
         result.prompt_version = getattr(self, "_last_prompt_version", None)
         result.usage = getattr(self, "_last_usage", {})
-        result.span.update({
-            "input_tokens": result.usage.get("input_tokens"),
-            "output_tokens": result.usage.get("output_tokens"),
-            "tier": result.usage.get("tier"),
-        })
+        result.span.update(
+            {
+                "input_tokens": result.usage.get("input_tokens"),
+                "output_tokens": result.usage.get("output_tokens"),
+                "tier": result.usage.get("tier"),
+            }
+        )
         return result
 
     @staticmethod

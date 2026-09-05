@@ -49,7 +49,7 @@ class TestWeights:
 
     def test_weights_not_summing_to_one_are_rejected(self):
         bad = {**DEFAULT_WEIGHTS, "cvss": 0.9}
-        with pytest.raises(ValueError, match="must sum to 1.0"):
+        with pytest.raises(ValueError, match=r"must sum to 1\.0"):
             validate_weights(bad)
 
 
@@ -70,10 +70,13 @@ class TestDeterminism:
 
 
 class TestMonotonicity:
-    @pytest.mark.parametrize("field,values", [
-        ("cvss_base", [0.0, 3.0, 6.0, 9.0, 10.0]),
-        ("epss", [0.0, 0.1, 0.5, 0.9, 1.0]),
-    ])
+    @pytest.mark.parametrize(
+        "field,values",
+        [
+            ("cvss_base", [0.0, 3.0, 6.0, 9.0, 10.0]),
+            ("epss", [0.0, 0.1, 0.5, 0.9, 1.0]),
+        ],
+    )
     def test_raising_a_component_never_lowers_the_score(self, scorer, field, values):
         scores = [scorer.score(make(**{field: v})).score for v in values]
         assert scores == sorted(scores)
@@ -95,19 +98,32 @@ class TestMonotonicity:
 
 class TestBounds:
     def test_score_never_exceeds_100(self, scorer):
-        result = scorer.score(make(
-            cvss_base=10.0, epss=1.0, kev=True, business_criticality="critical",
-            environment="production", internet_facing=True, data_classification="restricted",
-            last_patch_date=TODAY - timedelta(days=900),
-        ))
+        result = scorer.score(
+            make(
+                cvss_base=10.0,
+                epss=1.0,
+                kev=True,
+                business_criticality="critical",
+                environment="production",
+                internet_facing=True,
+                data_classification="restricted",
+                last_patch_date=TODAY - timedelta(days=900),
+            )
+        )
         assert 0.0 <= result.score <= 100.0
 
     def test_score_never_below_zero(self, scorer):
-        result = scorer.score(make(
-            cvss_base=0.0, epss=0.0, kev=False, business_criticality="low",
-            environment="development", data_classification="public",
-            has_compensating_control=True,
-        ))
+        result = scorer.score(
+            make(
+                cvss_base=0.0,
+                epss=0.0,
+                kev=False,
+                business_criticality="low",
+                environment="development",
+                data_classification="public",
+                has_compensating_control=True,
+            )
+        )
         assert result.score >= 0.0
 
 
@@ -115,14 +131,28 @@ class TestEnterpriseContextInversion:
     """The design's central claim, asserted directly."""
 
     def test_kev_on_exposed_tier1_outranks_higher_cvss_on_a_dev_box(self, scorer):
-        exposed = scorer.score(make(
-            cvss_base=6.5, epss=0.55, kev=True, business_criticality="critical",
-            environment="production", internet_facing=True, data_classification="restricted",
-        ))
-        dev_box = scorer.score(make(
-            cvss_base=9.8, epss=0.02, kev=False, business_criticality="low",
-            environment="development", internet_facing=False, data_classification="public",
-        ))
+        exposed = scorer.score(
+            make(
+                cvss_base=6.5,
+                epss=0.55,
+                kev=True,
+                business_criticality="critical",
+                environment="production",
+                internet_facing=True,
+                data_classification="restricted",
+            )
+        )
+        dev_box = scorer.score(
+            make(
+                cvss_base=9.8,
+                epss=0.02,
+                kev=False,
+                business_criticality="low",
+                environment="development",
+                internet_facing=False,
+                data_classification="public",
+            )
+        )
         assert exposed.score > dev_box.score, (
             "A CVSS-ordered queue would invert these. Enterprise context is the "
             "entire reason this platform exists."
@@ -155,32 +185,68 @@ class TestMissingData:
 
 class TestSlaSelection:
     def test_kev_and_internet_facing_is_the_tightest_window(self):
-        rule = select_sla(kev=True, internet_facing=True, cvss_base=5.0, epss=0.0,
-                          business_criticality="high", environment="production")
+        rule = select_sla(
+            kev=True,
+            internet_facing=True,
+            cvss_base=5.0,
+            epss=0.0,
+            business_criticality="high",
+            environment="production",
+        )
         assert rule.rule_id == "SLA-1"
         assert rule.days == 3
 
     def test_kev_overrides_the_cvss_band(self):
         """A medium-CVSS KEV entry must not fall into the medium window."""
-        kev_rule = select_sla(kev=True, internet_facing=False, cvss_base=5.5, epss=0.0,
-                              business_criticality="medium", environment="production")
-        plain_rule = select_sla(kev=False, internet_facing=False, cvss_base=5.5, epss=0.0,
-                                business_criticality="medium", environment="production")
+        kev_rule = select_sla(
+            kev=True,
+            internet_facing=False,
+            cvss_base=5.5,
+            epss=0.0,
+            business_criticality="medium",
+            environment="production",
+        )
+        plain_rule = select_sla(
+            kev=False,
+            internet_facing=False,
+            cvss_base=5.5,
+            epss=0.0,
+            business_criticality="medium",
+            environment="production",
+        )
         assert kev_rule.days == 7
         assert plain_rule.days == 90
         assert kev_rule.days < plain_rule.days
 
     def test_epss_threshold_tightens_the_window(self):
-        high = select_sla(kev=False, internet_facing=False, cvss_base=7.5, epss=0.15,
-                          business_criticality="high", environment="production")
-        low = select_sla(kev=False, internet_facing=False, cvss_base=7.5, epss=0.01,
-                         business_criticality="high", environment="production")
+        high = select_sla(
+            kev=False,
+            internet_facing=False,
+            cvss_base=7.5,
+            epss=0.15,
+            business_criticality="high",
+            environment="production",
+        )
+        low = select_sla(
+            kev=False,
+            internet_facing=False,
+            cvss_base=7.5,
+            epss=0.01,
+            business_criticality="high",
+            environment="production",
+        )
         assert high.days == 14
         assert low.days == 30
 
     def test_every_finding_matches_some_rule(self):
-        rule = select_sla(kev=False, internet_facing=False, cvss_base=0.0, epss=0.0,
-                          business_criticality=None, environment=None)
+        rule = select_sla(
+            kev=False,
+            internet_facing=False,
+            cvss_base=0.0,
+            epss=0.0,
+            business_criticality=None,
+            environment=None,
+        )
         assert rule.rule_id == "SLA-8"
 
     def test_rule_ids_are_unique(self):

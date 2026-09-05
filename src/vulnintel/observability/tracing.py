@@ -11,6 +11,7 @@ project must not depend on a SaaS account to show its own reliability.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import uuid
 from datetime import UTC, datetime
@@ -154,17 +155,13 @@ def get_run(run_id: str, db: Database | None = None) -> dict[str, Any] | None:
     run = conn.query_one("SELECT * FROM agent_run WHERE run_id = ?", [run_id])
     if run is None:
         return None
-    run["spans"] = conn.query(
-        "SELECT * FROM agent_span WHERE run_id = ? ORDER BY seq", [run_id]
-    )
+    run["spans"] = conn.query("SELECT * FROM agent_span WHERE run_id = ? ORDER BY seq", [run_id])
     run["tool_calls"] = conn.query(
         "SELECT * FROM tool_call WHERE run_id = ? ORDER BY called_at", [run_id]
     )
     if run.get("final_answer"):
-        try:
+        with contextlib.suppress(json.JSONDecodeError, TypeError):
             run["final_answer"] = json.loads(run["final_answer"])
-        except (json.JSONDecodeError, TypeError):
-            pass
     return run
 
 

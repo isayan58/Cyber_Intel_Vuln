@@ -86,19 +86,23 @@ class TestAuthentication:
 
 class TestRateLimiting:
     def test_reads_are_limited(self, app_factory):
-        client = app_factory(VULNINTEL_API_KEY="",
-                             VULNINTEL_RATE_LIMIT_ENABLED="true",
-                             VULNINTEL_RATE_LIMIT_DEFAULT="3")
+        client = app_factory(
+            VULNINTEL_API_KEY="",
+            VULNINTEL_RATE_LIMIT_ENABLED="true",
+            VULNINTEL_RATE_LIMIT_DEFAULT="3",
+        )
         codes = [client.get("/api/findings").status_code for _ in range(5)]
         assert codes[:3] == [200, 200, 200]
         assert codes[3] == 429
 
     def test_model_endpoints_get_a_tighter_budget(self, app_factory):
         """/api/ask spends money per call, so it must not share the read budget."""
-        client = app_factory(VULNINTEL_API_KEY="",
-                             VULNINTEL_RATE_LIMIT_ENABLED="true",
-                             VULNINTEL_RATE_LIMIT_DEFAULT="100",
-                             VULNINTEL_RATE_LIMIT_EXPENSIVE="2")
+        client = app_factory(
+            VULNINTEL_API_KEY="",
+            VULNINTEL_RATE_LIMIT_ENABLED="true",
+            VULNINTEL_RATE_LIMIT_DEFAULT="100",
+            VULNINTEL_RATE_LIMIT_EXPENSIVE="2",
+        )
         assert client.post("/api/ask").status_code == 200
         assert client.post("/api/ask").status_code == 200
         assert client.post("/api/ask").status_code == 429
@@ -106,9 +110,11 @@ class TestRateLimiting:
         assert client.get("/api/findings").status_code == 200
 
     def test_429_tells_the_caller_when_to_retry(self, app_factory):
-        client = app_factory(VULNINTEL_API_KEY="",
-                             VULNINTEL_RATE_LIMIT_ENABLED="true",
-                             VULNINTEL_RATE_LIMIT_DEFAULT="1")
+        client = app_factory(
+            VULNINTEL_API_KEY="",
+            VULNINTEL_RATE_LIMIT_ENABLED="true",
+            VULNINTEL_RATE_LIMIT_DEFAULT="1",
+        )
         client.get("/api/findings")
         r = client.get("/api/findings")
         assert r.status_code == 429

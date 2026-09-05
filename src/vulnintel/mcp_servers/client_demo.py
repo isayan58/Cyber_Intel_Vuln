@@ -87,7 +87,10 @@ async def main() -> None:
         [
             ("get_feed_freshness", {}),
             ("get_kev_status", {"cve_ids": ["CVE-2021-44228", "CVE-2014-0160"]}),
-            ("get_package_advisories", {"ecosystem": "PyPI", "package": "django", "version": "3.2.18"}),
+            (
+                "get_package_advisories",
+                {"ecosystem": "PyPI", "package": "django", "version": "3.2.18"},
+            ),
         ],
     )
     await probe(

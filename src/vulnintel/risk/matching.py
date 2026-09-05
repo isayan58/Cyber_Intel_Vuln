@@ -235,9 +235,7 @@ class FindingMatcher:
             vendor = (row["cpe_vendor"] or "").lower()
             product = (row["cpe_product"] or "").lower()
             by_vendor_product.setdefault((vendor, product), []).append(row)
-            vendors_per_product.setdefault(product, {}).setdefault(vendor, set()).add(
-                row["cve_id"]
-            )
+            vendors_per_product.setdefault(product, {}).setdefault(vendor, set()).add(row["cve_id"])
 
         findings: list[dict[str, Any]] = []
         for item in inventory:
@@ -252,9 +250,7 @@ class FindingMatcher:
                 resolved, confidence, ambiguous_vendor = _resolve_vendor(
                     product, vendors_per_product.get(product, {})
                 )
-                candidates = (
-                    by_vendor_product.get((resolved, product), []) if resolved else []
-                )
+                candidates = by_vendor_product.get((resolved, product), []) if resolved else []
 
             # A single popular product can carry tens of thousands of CPE
             # ranges across its whole history. Comparing every one against one
@@ -283,6 +279,19 @@ class FindingMatcher:
                 if verdict.verdict is Verdict.NOT_AFFECTED:
                     continue
 
+                # Several unrelated vendors publish products under the same
+                # name — NVD lists eleven distinct vendors for "http_server",
+                # and Jenkins ships a plugin called "mongodb". When the vendor
+                # could not be resolved, the version comparison may have run
+                # against somebody else's software, so the result is reported
+                # as unconfirmed rather than asserted as affected.
+                if ambiguous_vendor and verdict.verdict is Verdict.AFFECTED:
+                    verdict = RangeResult(
+                        Verdict.UNKNOWN,
+                        f"{verdict.reason}, but several vendors publish a product "
+                        f"named '{product}' in NVD — needs manual confirmation",
+                        verdict.fixed_version,
+                    )
 
                 findings.append(
                     {
@@ -301,11 +310,7 @@ class FindingMatcher:
         return findings
 
 
-
-
-def _resolve_vendor(
-    product: str, vendors: dict[str, set[str]]
-) -> tuple[str | None, float, bool]:
+def _resolve_vendor(product: str, vendors: dict[str, set[str]]) -> tuple[str | None, float, bool]:
     """Pick which vendor's ranges apply when inventory names no usable vendor.
 
     Product names are not unique in NVD. "http_server" is published by eleven
@@ -338,6 +343,7 @@ def _resolve_vendor(
         return ranked[0][0], 0.6, False
 
     return ranked[0][0], 0.35, True
+
 
 def _collapse(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """One finding per (asset, distinct vulnerability).
@@ -408,6 +414,7 @@ def _collapse(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
         collapsed.append(winner)
 
     return collapsed
+
 
 def _combine(results: list) -> Any:
     """Any affected range wins; otherwise unknown beats not-affected."""

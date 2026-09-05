@@ -22,8 +22,7 @@ from vulnintel.logging_setup import get_logger
 log = get_logger(__name__)
 
 ATTACK_URL = (
-    "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/"
-    "{domain}/{domain}.json"
+    "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/{domain}/{domain}.json"
 )
 
 DEFAULT_DOMAINS = ("enterprise-attack",)
@@ -159,9 +158,7 @@ class AttackPipeline(Pipeline):
 
         self.finish_run(run_id, rows_in=len(objects), rows_out=written)
         log.info("ATT&CK: %d objects, %d relationships", len(objects), len(relationships))
-        return IngestResult(
-            self.source, run_id, partition, rows_in=len(objects), rows_out=written
-        )
+        return IngestResult(self.source, run_id, partition, rows_in=len(objects), rows_out=written)
 
     # -- derived mappings -----------------------------------------------------
 
@@ -185,9 +182,7 @@ class AttackPipeline(Pipeline):
 
         rows: list[dict[str, Any]] = []
         for cwe_id, targets in CWE_TECHNIQUE_BRIDGE.items():
-            cves = self.db.query(
-                "SELECT DISTINCT cve_id FROM cve_cwe WHERE cwe_id = ?", [cwe_id]
-            )
+            cves = self.db.query("SELECT DISTINCT cve_id FROM cve_cwe WHERE cwe_id = ?", [cwe_id])
             for record in cves:
                 for attack_id, confidence, evidence in targets:
                     if attack_id not in known_techniques:

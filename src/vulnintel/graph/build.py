@@ -233,17 +233,13 @@ def build_graph(checkpointer: Any | None = None):
     graph.add_edge(START, "plan")
 
     # Conditional fan-out: returning a list schedules those nodes in parallel.
-    graph.add_conditional_edges(
-        "plan", route_after_plan, [*EVIDENCE_AGENTS, "synthesize"]
-    )
+    graph.add_conditional_edges("plan", route_after_plan, [*EVIDENCE_AGENTS, "synthesize"])
     for agent_name in EVIDENCE_AGENTS:
         graph.add_edge(agent_name, "synthesize")
 
     graph.add_edge("synthesize", "critic")
     graph.add_conditional_edges("critic", route_after_critic, ["replan", "respond"])
-    graph.add_conditional_edges(
-        "replan", route_after_replan, [*EVIDENCE_AGENTS, "synthesize"]
-    )
+    graph.add_conditional_edges("replan", route_after_replan, [*EVIDENCE_AGENTS, "synthesize"])
     graph.add_edge("respond", END)
 
     return graph.compile(checkpointer=checkpointer)
@@ -310,9 +306,7 @@ def graph_topology() -> dict[str, Any]:
             {"id": "replan", "label": "Targeted Re-plan", "kind": "supervisor"},
             {"id": "respond", "label": "Response", "kind": "output"},
         ],
-        "edges": [
-            {"from": "plan", "to": a, "kind": "conditional"} for a in EVIDENCE_AGENTS
-        ]
+        "edges": [{"from": "plan", "to": a, "kind": "conditional"} for a in EVIDENCE_AGENTS]
         + [{"from": a, "to": "synthesize", "kind": "join"} for a in EVIDENCE_AGENTS]
         + [
             {"from": "plan", "to": "synthesize", "kind": "conditional"},

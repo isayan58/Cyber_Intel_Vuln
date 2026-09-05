@@ -109,13 +109,10 @@ class ThreatIntelAgent(Agent):
 
         # Enforce the contract: retained mappings must exist in the candidates.
         allowed = {
-            (m.get("cve_id"), m.get("attack_id"))
-            for m in gathered.get("attack_candidates", [])
+            (m.get("cve_id"), m.get("attack_id")) for m in gathered.get("attack_candidates", [])
         }
         retained = interpretation.get("retained_mappings", []) or []
-        filtered = [
-            m for m in retained if (m.get("cve_id"), m.get("attack_id")) in allowed
-        ]
+        filtered = [m for m in retained if (m.get("cve_id"), m.get("attack_id")) in allowed]
         if len(filtered) != len(retained):
             log.warning(
                 "threat_intel: dropped %d ATT&CK mapping(s) not present in the candidate set",
@@ -132,11 +129,13 @@ class ThreatIntelAgent(Agent):
         result = super().run(state)
         result.prompt_version = getattr(self, "_last_prompt_version", None)
         result.usage = getattr(self, "_last_usage", {})
-        result.span.update({
-            "input_tokens": result.usage.get("input_tokens"),
-            "output_tokens": result.usage.get("output_tokens"),
-            "tier": result.usage.get("tier"),
-        })
+        result.span.update(
+            {
+                "input_tokens": result.usage.get("input_tokens"),
+                "output_tokens": result.usage.get("output_tokens"),
+                "tier": result.usage.get("tier"),
+            }
+        )
         return result
 
     @staticmethod

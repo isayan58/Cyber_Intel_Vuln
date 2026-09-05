@@ -60,9 +60,7 @@ class RiskRemediationAgent(Agent):
             finding_id = finding.get("finding_id") or finding.get("exemplar_finding_id")
             if finding_id is not None:
                 key = str(finding.get("cve_id") or finding_id)
-                explanations[key] = self.tools.call(
-                    "explain_score", finding_id=int(finding_id)
-                )
+                explanations[key] = self.tools.call("explain_score", finding_id=int(finding_id))
 
         return {
             "ranking_mode": ranking.get("mode"),
@@ -116,7 +114,9 @@ class RiskRemediationAgent(Agent):
 
         drift = verify_no_mutation(interpretation, gathered.get("findings", []))
         if drift:
-            log.warning("risk_remediation: %d score value(s) in the plan are not stored values", len(drift))
+            log.warning(
+                "risk_remediation: %d score value(s) in the plan are not stored values", len(drift)
+            )
             interpretation["score_drift_detected"] = drift
 
         self._last_usage = result.usage
@@ -127,20 +127,20 @@ class RiskRemediationAgent(Agent):
         result = super().run(state)
         result.prompt_version = getattr(self, "_last_prompt_version", None)
         result.usage = getattr(self, "_last_usage", {})
-        result.span.update({
-            "input_tokens": result.usage.get("input_tokens"),
-            "output_tokens": result.usage.get("output_tokens"),
-            "tier": result.usage.get("tier"),
-        })
+        result.span.update(
+            {
+                "input_tokens": result.usage.get("input_tokens"),
+                "output_tokens": result.usage.get("output_tokens"),
+                "tier": result.usage.get("tier"),
+            }
+        )
         return result
 
 
 SCORE_PATTERN = re.compile(r"\b(\d{1,3}(?:\.\d+)?)\s*/\s*100\b")
 
 
-def verify_no_mutation(
-    interpretation: dict[str, Any], findings: list[dict[str, Any]]
-) -> list[str]:
+def verify_no_mutation(interpretation: dict[str, Any], findings: list[dict[str, Any]]) -> list[str]:
     """Check that any ``NN/100`` in the plan matches a stored score.
 
     The prompt forbids recomputing scores. This checks rather than trusts —

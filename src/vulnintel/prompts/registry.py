@@ -122,8 +122,15 @@ class PromptRegistry:
             raise PromptError(f"prompt '{name}' has no 'system' block")
 
         known = {
-            "name", "version", "system", "user_template", "description",
-            "effort", "max_tokens", "output_schema", "model_tier",
+            "name",
+            "version",
+            "system",
+            "user_template",
+            "description",
+            "effort",
+            "max_tokens",
+            "output_schema",
+            "model_tier",
         }
         return Prompt(
             name=raw.get("name", name),

@@ -123,9 +123,7 @@ class OsvPipeline(Pipeline):
         # Child rows inherit the parent's duplicates, so they are written
         # through the key-aware path too.
         self.db.upsert("advisory_alias", aliases, key_columns=("advisory_id", "alias"))
-        self.db.upsert(
-            "advisory_affected", affected, key_columns=("advisory_id", "range_ordinal")
-        )
+        self.db.upsert("advisory_affected", affected, key_columns=("advisory_id", "range_ordinal"))
         return written
 
     # -- on-demand ------------------------------------------------------------
@@ -141,9 +139,7 @@ class OsvPipeline(Pipeline):
             for eco, name, version in packages
         ]
         with FeedClient() as client:
-            response = client._client.post(
-                OSV_QUERY_BATCH, json={"queries": queries}, timeout=60.0
-            )
+            response = client._client.post(OSV_QUERY_BATCH, json={"queries": queries}, timeout=60.0)
             response.raise_for_status()
             results = response.json().get("results", [])
 

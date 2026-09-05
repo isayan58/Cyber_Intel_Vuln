@@ -65,7 +65,9 @@ def ingest_knowledge_base(
     paths = discover_documents(root)
 
     if not paths:
-        log.warning("no knowledge-base documents found under %s", root or get_settings().knowledge_dir)
+        log.warning(
+            "no knowledge-base documents found under %s", root or get_settings().knowledge_dir
+        )
         return {"documents": 0, "chunks": 0, "embeddings": 0}
 
     now = datetime.now(UTC).replace(tzinfo=None)
@@ -148,9 +150,7 @@ def ingest_knowledge_base(
     return summary
 
 
-def reembed(
-    db: Database | None = None, provider: EmbeddingProvider | None = None
-) -> int:
+def reembed(db: Database | None = None, provider: EmbeddingProvider | None = None) -> int:
     """Recompute embeddings for existing chunks with a different provider."""
     db = db or get_db()
     provider = provider or get_embedding_provider()

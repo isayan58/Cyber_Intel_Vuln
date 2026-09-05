@@ -52,7 +52,8 @@ def get_cve(cve_id: str, db: Database | None = None) -> dict[str, Any]:
         [cve_id],
     )
     record["cwes"] = [
-        r["cwe_id"] for r in conn.query("SELECT DISTINCT cwe_id FROM cve_cwe WHERE cve_id = ?", [cve_id])
+        r["cwe_id"]
+        for r in conn.query("SELECT DISTINCT cwe_id FROM cve_cwe WHERE cve_id = ?", [cve_id])
     ]
     record["references"] = conn.query(
         "SELECT url, source, tags FROM cve_reference WHERE cve_id = ? LIMIT 25", [cve_id]
@@ -175,7 +176,9 @@ def get_epss(cve_ids: list[str], db: Database | None = None) -> dict[str, Any]:
     }
 
 
-def get_epss_history(cve_id: str, days: int = 90, db: Database | None = None) -> list[dict[str, Any]]:
+def get_epss_history(
+    cve_id: str, days: int = 90, db: Database | None = None
+) -> list[dict[str, Any]]:
     """EPSS trend from the rolling window kept in the warehouse."""
     conn = _db(db)
     return conn.query(

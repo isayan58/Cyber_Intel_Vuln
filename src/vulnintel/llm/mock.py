@@ -64,9 +64,7 @@ class MockProvider(LLMProvider):
         seed = int(_digest(system, prompt)[:8], 16)
         value = _from_schema(schema, seed=seed, prompt=prompt)
         text = json.dumps(value)
-        return LLMResponse(
-            text=text, usage=Usage(120, 64), model=self.model, structured=value
-        )
+        return LLMResponse(text=text, usage=Usage(120, 64), model=self.model, structured=value)
 
 
 def _digest(*parts: str) -> str:
@@ -146,9 +144,7 @@ def _from_schema(
     if schema_type == "array":
         item_schema = schema.get("items", {"type": "string"})
         count = max(int(schema.get("minItems", 1)), 1)
-        return [
-            _from_schema(item_schema, seed + i, prompt, depth + 1) for i in range(count)
-        ]
+        return [_from_schema(item_schema, seed + i, prompt, depth + 1) for i in range(count)]
     if schema_type == "integer":
         return int(schema.get("minimum", 1))
     if schema_type == "number":

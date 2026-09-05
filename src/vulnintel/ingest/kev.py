@@ -123,15 +123,12 @@ class KevPipeline(Pipeline):
                 "vulnerability_name": entry.get("vulnerabilityName"),
                 "short_description": entry.get("shortDescription"),
                 "required_action": entry.get("requiredAction"),
-                "known_ransomware_use": _ransomware_flag(
-                    entry.get("knownRansomwareCampaignUse")
-                ),
+                "known_ransomware_use": _ransomware_flag(entry.get("knownRansomwareCampaignUse")),
                 "notes": entry.get("notes"),
             }
 
         open_rows = {
-            row["cve_id"]: row
-            for row in self.db.query("SELECT * FROM kev WHERE valid_to IS NULL")
+            row["cve_id"]: row for row in self.db.query("SELECT * FROM kev WHERE valid_to IS NULL")
         }
 
         to_close: list[list[Any]] = []

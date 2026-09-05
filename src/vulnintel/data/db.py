@@ -44,9 +44,7 @@ class Database:
     def __init__(self, settings: Settings | None = None, read_only: bool | None = None) -> None:
         self.settings = settings or get_settings()
         self.backend = self.settings.db_backend
-        self.read_only = (
-            self.settings.db_read_only if read_only is None else read_only
-        )
+        self.read_only = self.settings.db_read_only if read_only is None else read_only
         self._lock = threading.RLock()
         self._conn: Any = None
 
@@ -182,14 +180,34 @@ class Database:
     def drop_all(self) -> None:
         """Drop every managed table — used by ``vulnintel db reset``."""
         tables = [
-            "eval_result", "tool_call", "agent_span", "agent_run",
-            "kb_chunk_embedding", "kb_chunk", "kb_document",
-            "finding_score", "risk_acceptances", "vulnerability_finding",
-            "dependencies", "software_inventory", "assets", "applications",
-            "attack_mapping", "attack_relationship", "attack_object",
-            "epss_history", "epss_current", "kev",
-            "advisory_affected", "advisory_alias", "advisory",
-            "cve_cpe_match", "cve_reference", "cve_cwe", "cve_cvss", "cve",
+            "eval_result",
+            "tool_call",
+            "agent_span",
+            "agent_run",
+            "kb_chunk_embedding",
+            "kb_chunk",
+            "kb_document",
+            "finding_score",
+            "risk_acceptances",
+            "vulnerability_finding",
+            "dependencies",
+            "software_inventory",
+            "assets",
+            "applications",
+            "attack_mapping",
+            "attack_relationship",
+            "attack_object",
+            "epss_history",
+            "epss_current",
+            "kev",
+            "advisory_affected",
+            "advisory_alias",
+            "advisory",
+            "cve_cpe_match",
+            "cve_reference",
+            "cve_cwe",
+            "cve_cvss",
+            "cve",
             "ingest_run",
         ]
         for table in tables:
@@ -266,9 +284,7 @@ class Database:
 
     # -- bulk internals -------------------------------------------------------
 
-    def _bulk_insert(
-        self, table: str, rows: Sequence[dict[str, Any]], columns: list[str]
-    ) -> int:
+    def _bulk_insert(self, table: str, rows: Sequence[dict[str, Any]], columns: list[str]) -> int:
         col_sql = ", ".join(columns)
         if self.backend == "duckdb":
             try:

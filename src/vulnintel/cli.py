@@ -1,18 +1,18 @@
 """VulnIntel AI command line.
 
-    vulnintel status                 what is loaded, what is missing
-    vulnintel db init | reset        create or drop the schema
-    vulnintel generate               synthetic estate from a fixed seed
-    vulnintel ingest <feed>...       feeds -> bronze -> warehouse
-    vulnintel rag build              policy corpus -> chunks -> embeddings
-    vulnintel match                  inventory x advisories -> findings
-    vulnintel score                  deterministic enterprise priority scoring
-    vulnintel bootstrap              everything above, in order
-    vulnintel rank                   ranked findings, no model involved
-    vulnintel ask "<question>"       full multi-agent investigation
-    vulnintel eval <suite>           run an evaluation suite
-    vulnintel serve                  FastAPI + HTMX UI
-    vulnintel mcp <server>           run an MCP server over stdio
+vulnintel status                 what is loaded, what is missing
+vulnintel db init | reset        create or drop the schema
+vulnintel generate               synthetic estate from a fixed seed
+vulnintel ingest <feed>...       feeds -> bronze -> warehouse
+vulnintel rag build              policy corpus -> chunks -> embeddings
+vulnintel match                  inventory x advisories -> findings
+vulnintel score                  deterministic enterprise priority scoring
+vulnintel bootstrap              everything above, in order
+vulnintel rank                   ranked findings, no model involved
+vulnintel ask "<question>"       full multi-agent investigation
+vulnintel eval <suite>           run an evaluation suite
+vulnintel serve                  FastAPI + HTMX UI
+vulnintel mcp <server>           run an MCP server over stdio
 """
 
 from __future__ import annotations
@@ -39,14 +39,10 @@ def _table(rows: list[dict[str, Any]], columns: list[str] | None = None) -> str:
     if not rows:
         return "  (no rows)"
     columns = columns or list(rows[0].keys())
-    widths = {
-        c: max(len(str(c)), max(len(_fmt(r.get(c))) for r in rows)) for c in columns
-    }
+    widths = {c: max(len(str(c)), max(len(_fmt(r.get(c))) for r in rows)) for c in columns}
     header = "  " + "  ".join(str(c).ljust(widths[c]) for c in columns)
     rule = "  " + "  ".join("-" * widths[c] for c in columns)
-    body = [
-        "  " + "  ".join(_fmt(r.get(c)).ljust(widths[c]) for c in columns) for r in rows
-    ]
+    body = ["  " + "  ".join(_fmt(r.get(c)).ljust(widths[c]) for c in columns) for r in rows]
     return "\n".join([header, rule, *body])
 
 
@@ -153,9 +149,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         "kev": lambda: KevPipeline(db).run(offline=args.offline),
         "epss": lambda: EpssPipeline(db).run(offline=args.offline),
         "attack": lambda: AttackPipeline(db).run(offline=args.offline),
-        "osv": lambda: OsvPipeline(db).run(
-            offline=args.offline, ecosystems=tuple(args.ecosystems)
-        ),
+        "osv": lambda: OsvPipeline(db).run(offline=args.offline, ecosystems=tuple(args.ecosystems)),
         "nvd": lambda: NvdPipeline(db).run(
             offline=args.offline, backfill=args.backfill, max_pages=args.max_pages
         ),
@@ -250,7 +244,10 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
     steps: list[tuple[str, Any]] = [
         ("generate estate", lambda: cmd_generate(args)),
         ("ingest feeds", lambda: cmd_ingest(args)),
-        ("build knowledge base", lambda: cmd_rag(argparse.Namespace(rag_action="build", skip_corpus=False))),
+        (
+            "build knowledge base",
+            lambda: cmd_rag(argparse.Namespace(rag_action="build", skip_corpus=False)),
+        ),
         ("plant demo scenarios", lambda: cmd_plant(args)),
         ("match findings", lambda: cmd_match(args)),
         ("score findings", lambda: cmd_score(args)),
@@ -279,8 +276,18 @@ def cmd_rank(args: argparse.Namespace) -> int:
     columns = (
         ["cve_id", "score", "asset_count", "application_count", "kev_listed", "epss", "cvss_base"]
         if args.by_cve
-        else ["finding_id", "cve_id", "hostname", "application_name", "score",
-              "kev_listed", "epss", "installed_version", "fixed_version", "sla_due_date"]
+        else [
+            "finding_id",
+            "cve_id",
+            "hostname",
+            "application_name",
+            "score",
+            "kev_listed",
+            "epss",
+            "installed_version",
+            "fixed_version",
+            "sla_due_date",
+        ]
     )
     _heading(f"Top {len(findings)} by enterprise priority score")
     print(_table(findings, columns))
@@ -305,16 +312,19 @@ def cmd_ask(args: argparse.Namespace) -> int:
     state = run_investigation(args.question, user_role=args.role)
 
     if args.json:
-        print(json.dumps(
-            {
-                "run_id": state.get("run_id"),
-                "answer": state.get("final_answer"),
-                "critique": state.get("critique"),
-                "citations": state.get("citations"),
-                "latency_ms": state.get("latency_ms"),
-            },
-            indent=2, default=str,
-        ))
+        print(
+            json.dumps(
+                {
+                    "run_id": state.get("run_id"),
+                    "answer": state.get("final_answer"),
+                    "critique": state.get("critique"),
+                    "citations": state.get("citations"),
+                    "latency_ms": state.get("latency_ms"),
+                },
+                indent=2,
+                default=str,
+            )
+        )
         return 0
 
     _heading("Plan")
@@ -382,10 +392,12 @@ def cmd_mcp(args: argparse.Namespace) -> int:
 def cmd_prompts(args: argparse.Namespace) -> int:
     from vulnintel.prompts import get_registry
 
-    print(_table(
-        get_registry().describe(),
-        ["name", "version", "effort", "has_schema", "system_tokens", "description"],
-    ))
+    print(
+        _table(
+            get_registry().describe(),
+            ["name", "version", "effort", "has_schema", "system_tokens", "description"],
+        )
+    )
     return 0
 
 
@@ -395,13 +407,16 @@ def cmd_prompts(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="vulnintel", description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        prog="vulnintel", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--version", action="version", version=f"vulnintel {__version__}")
     parser.add_argument("--log-level", default=None, help="DEBUG, INFO, WARNING, ERROR")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("status", help="what is loaded and what is missing").set_defaults(func=cmd_status)
+    sub.add_parser("status", help="what is loaded and what is missing").set_defaults(
+        func=cmd_status
+    )
 
     p = sub.add_parser("db", help="schema management")
     p.add_argument("db_action", choices=["init", "reset"])
@@ -425,8 +440,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("rag", help="knowledge base")
     rag_sub = p.add_subparsers(dest="rag_action", required=True)
     build = rag_sub.add_parser("build")
-    build.add_argument("--skip-corpus", action="store_true",
-                       help="do not regenerate the synthetic policy documents")
+    build.add_argument(
+        "--skip-corpus",
+        action="store_true",
+        help="do not regenerate the synthetic policy documents",
+    )
     rag_sub.add_parser("reembed")
     search = rag_sub.add_parser("search")
     search.add_argument("query")
@@ -460,8 +478,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("ask", help="run a full multi-agent investigation")
     p.add_argument("question")
-    p.add_argument("--role", default="analyst",
-                   choices=["analyst", "cto", "ciso", "application_owner"])
+    p.add_argument(
+        "--role", default="analyst", choices=["analyst", "cto", "ciso", "application_owner"]
+    )
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_ask)
 

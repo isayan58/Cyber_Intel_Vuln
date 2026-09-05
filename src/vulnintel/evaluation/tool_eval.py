@@ -62,7 +62,9 @@ def run(limit: int | None = None) -> dict[str, Any]:
             ok = isinstance(result, dict | list)
             rows.append(_row(spec.name, "smoke", "dict or list", shape, ok))
         except Exception as exc:  # noqa: BLE001
-            rows.append(_row(spec.name, "smoke", "no exception", f"{type(exc).__name__}: {exc}", False))
+            rows.append(
+                _row(spec.name, "smoke", "no exception", f"{type(exc).__name__}: {exc}", False)
+            )
 
     # 2. Schemas are well formed and match the handler's parameters.
     for spec in TOOL_SPECS:
@@ -73,7 +75,9 @@ def run(limit: int | None = None) -> dict[str, Any]:
             and schema.get("additionalProperties") is False
             and all(r in schema["properties"] for r in schema.get("required", []))
         )
-        rows.append(_row(spec.name, "schema", "valid object schema", "ok" if ok else "malformed", ok))
+        rows.append(
+            _row(spec.name, "schema", "valid object schema", "ok" if ok else "malformed", ok)
+        )
 
     # 3. Least privilege is enforced, not just documented.
     for agent, allowed in AGENT_TOOL_ALLOWLIST.items():
@@ -98,8 +102,9 @@ def run(limit: int | None = None) -> dict[str, Any]:
 
     # 5. Every tool is audited.
     audited = len(box.calls) > 0 and all(c.call_id for c in box.calls)
-    rows.append(_row("audit-trail", "audit", "every call recorded",
-                     f"{len(box.calls)} recorded", audited))
+    rows.append(
+        _row("audit-trail", "audit", "every call recorded", f"{len(box.calls)} recorded", audited)
+    )
 
     passed = [r for r in rows if r["passed"]]
     return {

@@ -127,8 +127,9 @@ class HybridRetriever:
         vector = self.index.vectors.search(query, top_k=candidates, allowed=allowed)
 
         fused = self._reciprocal_rank_fusion(lexical, vector)
-        evidence = [self._to_evidence(chunk_id, score, lexical, vector)
-                    for chunk_id, score in fused]
+        evidence = [
+            self._to_evidence(chunk_id, score, lexical, vector) for chunk_id, score in fused
+        ]
 
         if not include_superseded:
             evidence = [e for e in evidence if not e.is_superseded]
@@ -312,7 +313,9 @@ class HybridRetriever:
         )
 
 
-IDENTIFIER_RE = re.compile(r"\b(CVE-\d{4}-\d{4,7}|GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4})\b", re.I)
+IDENTIFIER_RE = re.compile(
+    r"\b(CVE-\d{4}-\d{4,7}|GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4})\b", re.I
+)
 
 
 def _identifiers(text: str) -> list[str]:

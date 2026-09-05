@@ -48,6 +48,7 @@ class ResponderAgent(Agent):
                 "prompt_version": result.prompt_version,
             }
             return result
+
         risk = evidence.get("risk_remediation") or {}
         plan = risk.get("interpretation") or {}
         findings = risk.get("findings") or []
@@ -131,12 +132,36 @@ def _with_degradation_notice(answer: str, state: GraphState) -> str:
 
 def _presentable(findings: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
     keep = (
-        "finding_id", "cve_id", "advisory_id", "hostname", "asset_count", "finding_count",
-        "application_name", "application_count", "business_service", "tier", "owner_team",
-        "environment", "internet_facing", "product", "installed_version", "fixed_version",
-        "score", "score_breakdown", "cvss_base", "cvss_severity", "epss", "epss_percentile",
-        "kev_listed", "sla_days", "sla_due_date", "sla_breached", "version_verdict",
-        "match_path", "match_confidence", "cve_description",
+        "finding_id",
+        "cve_id",
+        "advisory_id",
+        "hostname",
+        "asset_count",
+        "finding_count",
+        "application_name",
+        "application_count",
+        "business_service",
+        "tier",
+        "owner_team",
+        "environment",
+        "internet_facing",
+        "product",
+        "installed_version",
+        "fixed_version",
+        "score",
+        "score_breakdown",
+        "cvss_base",
+        "cvss_severity",
+        "epss",
+        "epss_percentile",
+        "kev_listed",
+        "sla_days",
+        "sla_due_date",
+        "sla_breached",
+        "version_verdict",
+        "match_path",
+        "match_confidence",
+        "cve_description",
     )
     return [{k: f.get(k) for k in keep if k in f} for f in findings[:limit]]
 
@@ -164,7 +189,8 @@ def render_deterministic(state: GraphState) -> str:
         "",
         "_Rendered deterministically from stored scores; no model involvement._",
         "",
-        "| # | CVE | Component | " + ("Blast radius" if grouped else "Asset / application")
+        "| # | CVE | Component | "
+        + ("Blast radius" if grouped else "Asset / application")
         + " | Score | KEV | EPSS | Installed | Fix | Due |",
         "|---|-----|-----------|" + "-" * 14 + "|-------|-----|------|-----------|-----|-----|",
     ]
@@ -177,9 +203,14 @@ def render_deterministic(state: GraphState) -> str:
             exemplar = (finding.get("top_assets") or [{}])[0]
             installed = exemplar.get("installed_version") or "various"
         else:
-            scope = " / ".join(
-                part for part in (finding.get("hostname"), finding.get("application_name")) if part
-            ) or "—"
+            scope = (
+                " / ".join(
+                    part
+                    for part in (finding.get("hostname"), finding.get("application_name"))
+                    if part
+                )
+                or "—"
+            )
             installed = finding.get("installed_version") or "—"
 
         due = finding.get("sla_due_date") or finding.get("earliest_due_date") or "—"
