@@ -374,11 +374,16 @@ CREATE TABLE IF NOT EXISTS kb_chunk (
 
 -- Kept separate so the vector store can be swapped for pgvector/Qdrant
 -- without touching chunk text or metadata.
+-- The key is (chunk_id, provider), not chunk_id: the index selects vectors by
+-- provider, so both the offline hash provider and a real encoder are meant to
+-- sit side by side and be compared without re-embedding between runs. With
+-- chunk_id alone the second provider collides on every row.
 CREATE TABLE IF NOT EXISTS kb_chunk_embedding (
-    chunk_id    VARCHAR PRIMARY KEY,
+    chunk_id    VARCHAR NOT NULL,
     dim         INTEGER NOT NULL,
     provider    VARCHAR NOT NULL,
-    embedding   {{VECTOR}} NOT NULL
+    embedding   {{VECTOR}} NOT NULL,
+    PRIMARY KEY (chunk_id, provider)
 );
 
 -- ============================================================================

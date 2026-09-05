@@ -160,8 +160,10 @@ def reembed(db: Database | None = None, provider: EmbeddingProvider | None = Non
         return 0
 
     vectors = provider.embed([r["text"] for r in rows])
-    db.execute("DELETE FROM kb_chunk_embedding WHERE provider = ?", [provider.name])
-    db.insert_many(
+    # Upsert on the full key rather than delete-then-insert: re-embedding with
+    # one provider must leave the other provider's vectors untouched, which is
+    # what makes an A/B between them possible without a rebuild.
+    db.upsert(
         "kb_chunk_embedding",
         [
             {
@@ -172,6 +174,7 @@ def reembed(db: Database | None = None, provider: EmbeddingProvider | None = Non
             }
             for index, row in enumerate(rows)
         ],
+        key_columns=("chunk_id", "provider"),
     )
     log.info("re-embedded %d chunks with '%s'", len(rows), provider.name)
     return len(rows)
