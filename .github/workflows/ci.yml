@@ -59,6 +59,58 @@ jobs:
       - name: End-to-end graph
         run: python -m vulnintel.cli eval end_to_end
 
+  postgres:
+    name: Postgres backend
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: vulnintel
+          POSTGRES_PASSWORD: vulnintel
+          POSTGRES_DB: vulnintel
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U vulnintel"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      VULNINTEL_DB_BACKEND: postgres
+      VULNINTEL_POSTGRES_DSN: postgresql://vulnintel:vulnintel@localhost:5432/vulnintel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[postgres,dev]"
+
+      # One schema is rendered for two dialects, so it is only portable if it
+      # is executed against both. Two real bugs were found the first time this
+      # ran: DuckDB's DOUBLE shorthand, and a DISTINCT query whose ORDER BY
+      # column was not in the select list.
+      - name: Schema, views and pipeline on Postgres
+        run: |
+          python -m vulnintel.cli db init
+          python -m vulnintel.cli generate --assets 300 --applications 20
+          python -m vulnintel.cli rag build
+          python -m vulnintel.cli match
+          python -m vulnintel.cli score
+
+      - name: Evaluation suites on Postgres
+        env:
+          VULNINTEL_LLM_PROVIDER: mock
+        run: |
+          python -m vulnintel.cli eval tools
+          python -m vulnintel.cli eval risk
+          python -m vulnintel.cli eval retrieval
+
+      - name: Agent graph on Postgres
+        env:
+          VULNINTEL_LLM_PROVIDER: mock
+        run: python -m vulnintel.cli eval end_to_end
+
   mcp:
     name: MCP servers speak the protocol
     runs-on: ubuntu-latest

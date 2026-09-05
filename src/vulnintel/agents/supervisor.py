@@ -63,7 +63,11 @@ class SupervisorAgent(Agent):
         names = [
             row["name"]
             for row in get_db().query(
-                "SELECT DISTINCT name FROM applications ORDER BY tier, name LIMIT 60"
+                # GROUP BY rather than DISTINCT: PostgreSQL requires every
+                # ORDER BY expression to appear in the select list of a
+                # DISTINCT query, where DuckDB does not.
+                "SELECT name FROM applications GROUP BY name "
+                "ORDER BY min(tier), name LIMIT 60"
             )
         ]
         return {"inventory_summary": summary, "application_names": names}

@@ -3,6 +3,10 @@
 -- Written once, rendered for DuckDB or PostgreSQL by data/db.py. Dialect
 -- differences are confined to the {{TOKENS}} below:
 --   {{JSON}}    JSON / JSONB
+--
+-- Types are otherwise chosen from the intersection of both dialects:
+-- DOUBLE PRECISION rather than DuckDB's DOUBLE shorthand, which Postgres
+-- rejects.
 --   {{VECTOR}}  FLOAT[] / REAL[]
 --   {{SERIAL}}  BIGINT DEFAULT nextval(...) — declared per-table via sequences
 --
@@ -57,10 +61,10 @@ CREATE TABLE IF NOT EXISTS cve_cvss (
     provider        VARCHAR NOT NULL,   -- nvd@nist.gov or the CNA
     metric_type     VARCHAR NOT NULL,   -- Primary | Secondary
     vector_string   VARCHAR,
-    base_score      DOUBLE,
+    base_score      DOUBLE PRECISION,
     base_severity   VARCHAR,
-    exploitability  DOUBLE,
-    impact          DOUBLE,
+    exploitability  DOUBLE PRECISION,
+    impact          DOUBLE PRECISION,
     PRIMARY KEY (cve_id, cvss_version, provider, metric_type)
 );
 
@@ -108,7 +112,7 @@ CREATE TABLE IF NOT EXISTS advisory (
     summary         VARCHAR,
     details         VARCHAR,
     severity_vector VARCHAR,
-    severity_score  DOUBLE,
+    severity_score  DOUBLE PRECISION,
     published_at    TIMESTAMP,
     modified_at     TIMESTAMP,
     withdrawn_at    TIMESTAMP,
@@ -161,8 +165,8 @@ CREATE TABLE IF NOT EXISTS kev (
 
 CREATE TABLE IF NOT EXISTS epss_current (
     cve_id      VARCHAR PRIMARY KEY,
-    probability DOUBLE NOT NULL,
-    percentile  DOUBLE NOT NULL,
+    probability DOUBLE PRECISION NOT NULL,
+    percentile  DOUBLE PRECISION NOT NULL,
     score_date  DATE NOT NULL,
     source_run_id BIGINT
 );
@@ -172,8 +176,8 @@ CREATE TABLE IF NOT EXISTS epss_current (
 CREATE TABLE IF NOT EXISTS epss_history (
     cve_id      VARCHAR NOT NULL,
     score_date  DATE NOT NULL,
-    probability DOUBLE NOT NULL,
-    percentile  DOUBLE NOT NULL,
+    probability DOUBLE PRECISION NOT NULL,
+    percentile  DOUBLE PRECISION NOT NULL,
     PRIMARY KEY (cve_id, score_date)
 );
 
@@ -212,7 +216,7 @@ CREATE TABLE IF NOT EXISTS attack_relationship (
 CREATE TABLE IF NOT EXISTS attack_mapping (
     cve_id      VARCHAR NOT NULL,
     attack_id   VARCHAR NOT NULL,
-    confidence  DOUBLE NOT NULL,
+    confidence  DOUBLE PRECISION NOT NULL,
     basis       VARCHAR NOT NULL,   -- cwe-bridge | kev-action | manual
     evidence    VARCHAR,
     PRIMARY KEY (cve_id, attack_id, basis)
@@ -259,8 +263,8 @@ CREATE TABLE IF NOT EXISTS software_inventory (
     version             VARCHAR NOT NULL,
     purl                VARCHAR,        -- canonical key for OSV matching
     cpe23               VARCHAR,        -- canonical key for NVD matching
-    purl_confidence     DOUBLE,
-    cpe23_confidence    DOUBLE,
+    purl_confidence     DOUBLE PRECISION,
+    cpe23_confidence    DOUBLE PRECISION,
     discovered_at       TIMESTAMP
 );
 
@@ -282,14 +286,14 @@ CREATE TABLE IF NOT EXISTS vulnerability_finding (
     cve_id              VARCHAR,
     advisory_id         VARCHAR,
     match_path          VARCHAR NOT NULL,   -- cpe | purl | alias
-    match_confidence    DOUBLE NOT NULL,
+    match_confidence    DOUBLE PRECISION NOT NULL,
     version_verdict     VARCHAR NOT NULL,   -- affected | not_affected | unknown
     fixed_version       VARCHAR,
     detected_at         TIMESTAMP,
     first_seen          TIMESTAMP,
     last_seen           TIMESTAMP,
     status              VARCHAR,            -- open | remediated | risk_accepted
-    scanner_confidence  DOUBLE,
+    scanner_confidence  DOUBLE PRECISION,
     -- How many raw advisory/range matches collapsed into this finding, and
     -- which sources agreed. One asset plus one vulnerability is one row;
     -- without that, the same issue is counted several times and the two
@@ -317,15 +321,15 @@ CREATE TABLE IF NOT EXISTS risk_acceptances (
 CREATE TABLE IF NOT EXISTS finding_score (
     finding_id          BIGINT PRIMARY KEY,
     model_version       VARCHAR NOT NULL,
-    score               DOUBLE NOT NULL,
-    cvss_base           DOUBLE,
-    cvss_norm           DOUBLE,
-    epss                DOUBLE,
-    epss_percentile     DOUBLE,
+    score               DOUBLE PRECISION NOT NULL,
+    cvss_base           DOUBLE PRECISION,
+    cvss_norm           DOUBLE PRECISION,
+    epss                DOUBLE PRECISION,
+    epss_percentile     DOUBLE PRECISION,
     kev_flag            INTEGER,
-    criticality         DOUBLE,
+    criticality         DOUBLE PRECISION,
     exposure            INTEGER,
-    sensitivity         DOUBLE,
+    sensitivity         DOUBLE PRECISION,
     weights             {{JSON}},
     contributions       {{JSON}},
     sla_days            INTEGER,
@@ -432,7 +436,7 @@ CREATE TABLE IF NOT EXISTS eval_result (
     suite       VARCHAR NOT NULL,
     case_id     VARCHAR NOT NULL,
     metric      VARCHAR NOT NULL,
-    value       DOUBLE,
+    value       DOUBLE PRECISION,
     passed      BOOLEAN,
     detail      {{JSON}},
     run_at      TIMESTAMP NOT NULL
