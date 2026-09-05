@@ -68,21 +68,37 @@ class MockProvider(LLMProvider):
 
 
 _INTENT_HINTS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("patch_queue", ("can patch", "only", "capacity", "schedule first", "today")),
+    # Most specific first: the rendered prompt carries the question plus
+    # surrounding context, so loose keywords collide with each other.
     ("cve_investigation", ("cve-", "ghsa-", "are we affected", "blast radius")),
-    ("policy_question", ("policy", "sla", "standard", "who approves", "require")),
-    ("application_assessment", ("exposure of", "assess the", "remediation plan")),
-    ("executive_brief", ("cto", "executive", "board", "this week", "most concerned")),
+    ("patch_queue", ("can patch only", "patch only", "scheduled first", "capacity")),
+    ("executive_brief", ("cto", "executive", "board", "most concerned")),
+    ("application_assessment", ("exposure of", "assess the security")),
+    ("policy_question", ("what does our policy", "policy require", "sla for")),
+)
+
+_MODE_HINTS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("executive", ("user role: cto", "user role: ciso", "user role: executive")),
+    ("application_owner", ("user role: application_owner", "user role: app_owner")),
 )
 
 
 def _guess_intent(prompt: str) -> str:
-    """Keyword intent, matching the supervisor's own fallback heuristic."""
+    """Keyword intent, mirroring the supervisor's own fallback heuristic."""
     text = prompt.lower()
     for intent, hints in _INTENT_HINTS:
         if any(hint in text for hint in hints):
             return intent
     return "general"
+
+
+def _guess_mode(prompt: str) -> str:
+    """Response mode from the stated role, as a real planner would."""
+    text = prompt.lower()
+    for mode, hints in _MODE_HINTS:
+        if any(hint in text for hint in hints):
+            return mode
+    return "analyst"
 
 
 def _digest(*parts: str) -> str:
@@ -123,6 +139,11 @@ _FIELD_DEFAULTS: dict[str, Any] = {
     "asset_hostnames": [],
     "products": [],
     "missing_data": [],
+    # A stand-in cannot cite a real chunk, so it claims no obligations rather
+    # than inventing one that the citation check then correctly discards —
+    # which would leave the plan asserting policy with no evidence behind it.
+    "obligations": [],
+    "policy_obligations": [],
 }
 
 
@@ -137,6 +158,8 @@ def _from_schema(
     if depth > 6:
         return None
 
+    if field_name == "response_mode":
+        return _guess_mode(prompt)
     if field_name == "intent":
         # Derived from the prompt rather than picked from the enum by hash.
         # A stand-in that routes "we can only patch 20 today" to an asset

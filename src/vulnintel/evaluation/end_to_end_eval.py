@@ -114,7 +114,11 @@ def _check(scenario: dict[str, Any], state: dict[str, Any]) -> list[dict[str, An
     rows.append(_row(sid, "completes", "an answer", f"{len(answer)} chars", bool(answer)))
 
     if "expect_agents" in scenario:
-        ran = set(state.get("required_agents") or [])
+        # Spans, not required_agents: a re-plan narrows required_agents to the
+        # gap it is filling, so reading it after the fact reports the last
+        # cycle rather than everything that ran.
+        ran = {s.get("node") for s in state.get("spans") or []}
+        ran |= {"risk_remediation"} if "risk_remediation" in ran else set()
         missing = [a for a in scenario["expect_agents"] if a not in ran]
         rows.append(
             _row(
