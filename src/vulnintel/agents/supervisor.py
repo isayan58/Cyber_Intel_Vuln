@@ -66,8 +66,7 @@ class SupervisorAgent(Agent):
                 # GROUP BY rather than DISTINCT: PostgreSQL requires every
                 # ORDER BY expression to appear in the select list of a
                 # DISTINCT query, where DuckDB does not.
-                "SELECT name FROM applications GROUP BY name "
-                "ORDER BY min(tier), name LIMIT 60"
+                "SELECT name FROM applications GROUP BY name ORDER BY min(tier), name LIMIT 60"
             )
         ]
         return {"inventory_summary": summary, "application_names": names}

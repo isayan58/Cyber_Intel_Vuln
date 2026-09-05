@@ -67,6 +67,24 @@ class MockProvider(LLMProvider):
         return LLMResponse(text=text, usage=Usage(120, 64), model=self.model, structured=value)
 
 
+_INTENT_HINTS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("patch_queue", ("can patch", "only", "capacity", "schedule first", "today")),
+    ("cve_investigation", ("cve-", "ghsa-", "are we affected", "blast radius")),
+    ("policy_question", ("policy", "sla", "standard", "who approves", "require")),
+    ("application_assessment", ("exposure of", "assess the", "remediation plan")),
+    ("executive_brief", ("cto", "executive", "board", "this week", "most concerned")),
+)
+
+
+def _guess_intent(prompt: str) -> str:
+    """Keyword intent, matching the supervisor's own fallback heuristic."""
+    text = prompt.lower()
+    for intent, hints in _INTENT_HINTS:
+        if any(hint in text for hint in hints):
+            return intent
+    return "general"
+
+
 def _digest(*parts: str) -> str:
     return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
 
@@ -119,6 +137,11 @@ def _from_schema(
     if depth > 6:
         return None
 
+    if field_name == "intent":
+        # Derived from the prompt rather than picked from the enum by hash.
+        # A stand-in that routes "we can only patch 20 today" to an asset
+        # lookup is not exercising the workflow the question describes.
+        return _guess_intent(prompt)
     if field_name in _FIELD_DEFAULTS:
         return _FIELD_DEFAULTS[field_name]
     if "const" in schema:

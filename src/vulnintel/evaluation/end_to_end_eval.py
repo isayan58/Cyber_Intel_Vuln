@@ -187,7 +187,11 @@ def _check(scenario: dict[str, Any], state: dict[str, Any]) -> list[dict[str, An
         if isinstance(payload, dict):
             evidence_cves.update(CVE_RE.findall(str(payload)))
     answer_cves = set(CVE_RE.findall(answer))
-    unsupported = answer_cves - evidence_cves
+    # A CVE the user named is legitimate to echo back, including when it does
+    # not exist — "we found no record of CVE-1999-00000" is the right answer,
+    # not a fabrication.
+    asked_cves = set(CVE_RE.findall(scenario.get("question", "")))
+    unsupported = answer_cves - evidence_cves - asked_cves
     rows.append(
         _row(
             sid,
