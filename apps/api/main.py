@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Form, Query, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -462,20 +463,29 @@ def health():
 @app.post("/api/ask")
 def ask(question: str = Form(...), user_role: str = Form("analyst")):
     state = run_investigation(question, user_role)
+    # jsonable_encoder, not a bare JSONResponse: a scored finding carries
+    # kev_date_added and sla_due_date as date objects, and json.dumps has no
+    # handler for a date. Every other endpoint returns a plain dict and gets
+    # FastAPI's encoding for free; this one constructs the response itself and
+    # so opted out of it. The investigation has already run and been billed by
+    # the time this executes, so a serialisation slip here throws away a
+    # paid-for answer and reports it to the caller as a 500.
     return JSONResponse(
-        {
-            "run_id": state.get("run_id"),
-            "answer": state.get("final_answer"),
-            "intent": state.get("intent"),
-            "response_mode": state.get("response_mode"),
-            "agents_run": state.get("required_agents"),
-            "replan_count": state.get("replan_count"),
-            "critique": state.get("critique"),
-            "citations": state.get("citations"),
-            "findings": state.get("scored_findings", [])[:20],
-            "latency_ms": state.get("latency_ms"),
-            "prompt_versions": state.get("prompt_versions"),
-        }
+        jsonable_encoder(
+            {
+                "run_id": state.get("run_id"),
+                "answer": state.get("final_answer"),
+                "intent": state.get("intent"),
+                "response_mode": state.get("response_mode"),
+                "agents_run": state.get("required_agents"),
+                "replan_count": state.get("replan_count"),
+                "critique": state.get("critique"),
+                "citations": state.get("citations"),
+                "findings": state.get("scored_findings", [])[:20],
+                "latency_ms": state.get("latency_ms"),
+                "prompt_versions": state.get("prompt_versions"),
+            }
+        )
     )
 
 
