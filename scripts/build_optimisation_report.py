@@ -743,6 +743,75 @@ def build() -> Path:
         [1.55, 3.3, 1.9],
     )
 
+    doc.add_heading("7.4 Three claims the instrumentation was hiding", level=2)
+    para(
+        doc,
+        "Running the suites against the live API rather than the offline stub falsified "
+        "three things this document previously asserted. All three were measurement "
+        "failures, not model failures.",
+    )
+    callout(
+        doc,
+        "Prompt caching has never engaged.",
+        "Every system block is sent with cache_control and a 1h TTL, and the report "
+        "credited it as a cost optimisation. Measured against the live API, the cache "
+        "tokens on every span are zero: the API will not cache a block below 1024 tokens "
+        "(2048 on Haiku), and every shipped prompt is 400-855 tokens. The directive was "
+        "accepted and silently ignored. It is left in place because it costs nothing and "
+        "begins working if a prompt grows past the threshold, but it is not today a "
+        "saving. What dominates input cost is the evidence payload in the user message, "
+        "which differs per question and is not shared between runs - so the trimming in "
+        "3.5 was doing the work the cache was being credited for.",
+        "FFF6E8",
+    )
+    callout(
+        doc,
+        "A third of each run was billed but not counted.",
+        "The critic and the responder recorded no tokens at all, and risk_remediation "
+        "recorded them only on some paths. All three set usage on a private result object "
+        "after the span had already been built, so the cost panel shown beside every "
+        "answer summed a subset and presented it as the total. The per-node table in 7.1 "
+        "was therefore an undercount, not the conservative overcount it appeared to be. "
+        "Fixed by building the token half of a span in one place that reads through to the "
+        "agent's own record, with a test asserting no model-backed node reports zero.",
+        "FFF6E8",
+    )
+    callout(
+        doc,
+        "Better embeddings do not fix the abstention case.",
+        "The open question was whether the offline hash embeddings were the reason the "
+        "out-of-scope adversarial case failed. Measured with sentence-transformers "
+        "(all-MiniLM-L6-v2) over the same corpus: MRR improved 0.880 to 0.944, recall@5 "
+        "stayed at 1.00, and the adversarial result did not move - the out-of-scope query "
+        "still scored just above the floor (0.0151 against 0.0156). The hypothesis was "
+        "wrong. The actual defect was that a fused relevance score for an unanswerable "
+        "question lands in the same band as a real hit, so no threshold on it can "
+        "separate them. Query-term coverage does: in-scope questions score 0.63-1.00, "
+        "out-of-scope 0.20-0.29.",
+        "EEF3FD",
+    )
+    table(
+        doc,
+        ["Retrieval metric", "hash (default)", "sentence-transformers", "Verdict"],
+        [
+            ["recall@5", "1.000", "1.000", "no difference"],
+            ["recall@10", "1.000", "1.000", "no difference"],
+            ["MRR", "0.880", "0.944", "+7.3% for the real encoder"],
+            ["adversarial", "3/3", "3/3", "fixed by the retriever, not the encoder"],
+            ["setup cost", "none", "~90MB model download", "why hash stays the default"],
+        ],
+        [1.6, 1.4, 1.9, 1.9],
+    )
+    para(
+        doc,
+        "The hash provider remains the default: it clones and runs with no download and "
+        "now passes every adversarial case. The real encoder is one environment variable "
+        "away and buys ranking quality, not correctness.",
+        size=9.5,
+        italic=True,
+        colour=MUTED,
+    )
+
     # ===== 8. backlog =====
     doc.add_heading("8. Backlog, by axis", level=1)
     table(
