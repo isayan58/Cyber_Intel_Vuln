@@ -49,6 +49,11 @@ app = FastAPI(
     description="Enterprise vulnerability and cyber-risk intelligence platform",
 )
 
+from api.security import SecurityMiddleware, warn_if_unprotected  # noqa: E402
+
+app.add_middleware(SecurityMiddleware)
+warn_if_unprotected()
+
 STATIC_DIR = BASE_DIR / "static"
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

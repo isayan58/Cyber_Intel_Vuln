@@ -83,6 +83,14 @@ class Settings(BaseSettings):
     http_timeout_seconds: float = 60.0
     http_max_retries: int = 4
 
+    # --- api security --------------------------------------------------------
+    # Unset by default so a local clone is a one-command demo. Setting it turns
+    # on authentication for every endpoint except health and static assets.
+    api_key: str = ""
+    rate_limit_enabled: bool = True
+    rate_limit_default: int = 120      # requests per minute, read endpoints
+    rate_limit_expensive: int = 6      # requests per minute, endpoints that call a model
+
     # --- misc ----------------------------------------------------------------
     log_level: str = "INFO"
 
