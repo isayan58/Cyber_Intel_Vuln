@@ -37,9 +37,6 @@ class Settings(BaseSettings):
 
     # --- llm -----------------------------------------------------------------
     llm_provider: Literal["anthropic", "mock"] = "anthropic"
-    # Two tiers. Extraction and summarisation do not need frontier reasoning
-    # and run 5x cheaper on Haiku; planning, synthesis and verification stay on
-    # Opus. Each prompt declares its tier in its YAML.
     # Three tiers, chosen from measured per-node cost. Extraction and
     # presentation run on Haiku; structured synthesis over already-computed
     # numbers runs on Sonnet; only verification stays on Opus, and only when a

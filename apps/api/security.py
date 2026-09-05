@@ -24,7 +24,8 @@ import time
 from collections import defaultdict, deque
 from dataclasses import dataclass
 
-from fastapi import HTTPException, Request, status
+from fastapi import Request, status
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from vulnintel.config import get_settings
@@ -124,31 +125,35 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             # compare_digest to keep the comparison time independent of how
             # much of the key the caller guessed correctly.
             if not presented or not hmac.compare_digest(presented, configured):
-                raise HTTPException(
+                # Returned, not raised. Starlette's exception handler sits
+                # inside the middleware stack, so an HTTPException raised here
+                # escapes it and surfaces as a 500 rather than a 401.
+                return JSONResponse(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="A valid API key is required. Send it as X-API-Key.",
+                    content={"detail": "A valid API key is required. Send it as X-API-Key."},
                     headers={"WWW-Authenticate": "Bearer"},
                 )
 
         if settings.rate_limit_enabled:
             expensive = path.startswith(EXPENSIVE_PATHS)
-            budget = EXPENSIVE_BUDGET if expensive else DEFAULT_BUDGET
-            if expensive:
-                budget = Budget(settings.rate_limit_expensive, 60.0)
-            else:
-                budget = Budget(settings.rate_limit_default, 60.0)
+            budget = Budget(
+                settings.rate_limit_expensive if expensive else settings.rate_limit_default,
+                60.0,
+            )
 
             allowed, retry_after = limiter.check(
                 _client_id(request), "expensive" if expensive else "default", budget
             )
             if not allowed:
                 log.warning("rate limit hit on %s by %s", path, _client_id(request))
-                raise HTTPException(
+                return JSONResponse(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail=(
-                        f"Rate limit exceeded ({budget.requests} requests per minute "
-                        f"for this endpoint). Retry in {retry_after}s."
-                    ),
+                    content={
+                        "detail": (
+                            f"Rate limit exceeded ({budget.requests} requests per minute "
+                            f"for this endpoint). Retry in {retry_after}s."
+                        )
+                    },
                     headers={"Retry-After": str(retry_after)},
                 )
 
