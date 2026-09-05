@@ -19,12 +19,15 @@ import yaml
 
 from vulnintel.config import get_settings
 from vulnintel.logging_setup import get_logger
-from vulnintel.rag.retriever import HybridRetriever
+from vulnintel.rag.retriever import COVERAGE_FLOOR, HybridRetriever
 
 log = get_logger(__name__)
 
 DATASET = "retrieval.yaml"
-CONFIDENCE_FLOOR = 0.012  # below this, a top hit is treated as "no confident match"
+# The retriever decides what "confident" means (see COVERAGE_FLOOR); the suite
+# asserts on that decision rather than on a second, independently tuned
+# threshold. A fused relevance score cannot serve here — for an out-of-scope
+# question it lands inside the same band as a genuine hit.
 
 
 def load_dataset() -> dict[str, Any]:
@@ -108,9 +111,8 @@ def _adversarial(retriever: HybridRetriever, cases: list[dict[str, Any]]) -> lis
             note = f"{len(result.conflicts)} conflict(s) reported"
 
         elif case.get("expect_no_confident_match"):
-            best = max((e.rerank_score or 0.0) for e in result.evidence) if result.evidence else 0.0
-            passed = best < CONFIDENCE_FLOOR
-            note = f"best rerank {best:.4f} vs floor {CONFIDENCE_FLOOR}"
+            passed = not result.is_confident
+            note = f"coverage {result.confidence:.3f} vs floor {COVERAGE_FLOOR}"
 
         rows.append({"id": case["id"], "rank": "—", "phrases": "—", "passed": passed, "note": note})
 

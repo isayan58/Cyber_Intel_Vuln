@@ -31,6 +31,12 @@ from vulnintel.rag.index import KnowledgeIndex, ScoredChunk
 
 log = get_logger(__name__)
 
+# Below this share of query terms present in the best chunk, the corpus does
+# not cover the question and the honest answer is "we have no policy on this".
+# Measured on the eval set: in-scope questions score 0.63-1.00, out-of-scope
+# ones 0.20-0.29, so the gap is wide and the exact value is not delicate.
+COVERAGE_FLOOR = 0.45
+
 AUTHORITY_WEIGHT = {
     "internal": 1.00,
     "nist": 0.85,
@@ -59,6 +65,12 @@ class Evidence:
     lexical_rank: int | None = None
     vector_rank: int | None = None
     rerank_score: float | None = None
+    # Fraction of the query's content terms that appear in this chunk. Kept
+    # because it is the only retrieval signal that separates "the corpus
+    # answers this" from "the corpus does not": fused scores for an
+    # out-of-scope query land in the same band as a real hit, term coverage
+    # does not.
+    coverage: float | None = None
 
     @property
     def is_superseded(self) -> bool:
@@ -90,12 +102,27 @@ class RetrievalResult:
     conflicts: list[str] = field(default_factory=list)
     candidate_count: int = 0
 
+    @property
+    def confidence(self) -> float:
+        """Best term coverage across the returned evidence.
+
+        Ranking says which chunk is *most* relevant; it never says whether
+        anything is relevant at all. This does.
+        """
+        return max((e.coverage or 0.0 for e in self.evidence), default=0.0)
+
+    @property
+    def is_confident(self) -> bool:
+        return self.confidence >= COVERAGE_FLOOR
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "query": self.query,
             "filters": self.filters,
             "conflicts": self.conflicts,
             "candidate_count": self.candidate_count,
+            "confidence": round(self.confidence, 4),
+            "is_confident": self.is_confident,
             "evidence": [e.to_dict() for e in self.evidence],
         }
 
@@ -144,7 +171,12 @@ class HybridRetriever:
             query=query,
             evidence=selected,
             filters=filters or {},
-            conflicts=self._detect_conflicts(selected),
+            # Detected across the whole reranked pool, not just the slice
+            # returned. A superseded document is deliberately pushed below the
+            # cut by the currency penalty, so looking only at the top-k means
+            # the one case that most needs a warning — both versions match —
+            # can never produce one.
+            conflicts=self._detect_conflicts(evidence),
             candidate_count=len(fused),
         )
 
@@ -188,6 +220,7 @@ class HybridRetriever:
         for item in evidence:
             chunk_terms = set(tokenize(item.text))
             coverage = len(query_terms & chunk_terms) / len(query_terms)
+            item.coverage = round(coverage, 4)
 
             authority = AUTHORITY_WEIGHT.get((item.authority or "").lower(), 0.7)
             currency = 0.35 if item.is_superseded else 1.0
@@ -262,7 +295,12 @@ class HybridRetriever:
         """Surface conflicts rather than silently averaging guidance (§8.3)."""
         conflicts: list[str] = []
         by_title: dict[str, list[Evidence]] = {}
-        for item in evidence:
+        # Only versions that genuinely answer the question count. Every query
+        # drags both versions into the candidate pool on shared vocabulary
+        # alone, and a conflict warning that fires on every question — including
+        # ones the corpus does not cover — is noise the reader learns to skip.
+        relevant = [e for e in evidence if (e.coverage or 0.0) >= COVERAGE_FLOOR]
+        for item in relevant:
             base = item.title.replace(" (SUPERSEDED)", "").strip()
             by_title.setdefault(base, []).append(item)
 

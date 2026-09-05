@@ -57,7 +57,7 @@ jobs:
           python -m vulnintel.cli eval retrieval
 
       - name: End-to-end graph
-        run: python -m vulnintel.cli eval end_to_end
+        run: python -m vulnintel.cli eval end_to_end --provider mock
 
   postgres:
     name: Postgres backend
@@ -109,7 +109,7 @@ jobs:
       - name: Agent graph on Postgres
         env:
           VULNINTEL_LLM_PROVIDER: mock
-        run: python -m vulnintel.cli eval end_to_end
+        run: python -m vulnintel.cli eval end_to_end --provider mock
 
   mcp:
     name: MCP servers speak the protocol
