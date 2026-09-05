@@ -237,11 +237,28 @@ class TestEndToEndGraph:
         ]
         assert not silent, f"model-backed nodes recorded no tokens: {silent}"
 
-    def test_the_responder_records_tokens(self, seeded_db, knowledge_db):
-        """The responder builds its span by hand, so it is the easiest to forget."""
-        from vulnintel.graph import run_investigation
+    def test_the_responder_records_tokens_when_it_calls_the_model(self, seeded_db, knowledge_db):
+        """The responder builds its span by hand, so it is the easiest to forget.
 
-        state = run_investigation("What are our top security risks?", user_role="cto")
-        responder = next(s for s in state["spans"] if s["node"] == "responder")
-        assert responder.get("input_tokens"), "the responder wrote an answer but billed nothing"
-        assert responder.get("output_tokens")
+        ``prompt_version`` is the signal that the model actually ran: with no
+        findings the responder renders a deterministic notice instead, and
+        billing nothing is then the correct answer.
+        """
+        from vulnintel.agents.responder import ResponderAgent
+
+        agent = ResponderAgent(run_id=None, persist=False)
+        result = agent.run(
+            {
+                "question": "What are our top security risks?",
+                "response_mode": "executive",
+                "evidence": {
+                    "risk_remediation": {
+                        "interpretation": {"summary": "one finding"},
+                        "findings": [{"cve_id": "CVE-2024-0001", "score": 91.2}],
+                    }
+                },
+            }
+        )
+        assert result.prompt_version, "the responder did not reach the model"
+        assert result.span.get("input_tokens"), "the responder wrote an answer but billed nothing"
+        assert result.span.get("output_tokens")
