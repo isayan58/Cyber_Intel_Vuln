@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from typing import Any
 
 from vulnintel.llm.base import LLMProvider, LLMResponse, Usage
@@ -101,6 +102,26 @@ def _guess_mode(prompt: str) -> str:
     return "analyst"
 
 
+_CVE_RE = re.compile(r"\bCVE-\d{4}-\d{4,7}\b", re.IGNORECASE)
+_GHSA_RE = re.compile(r"\bGHSA(?:-[23456789cfghjmpqrvwx]{4}){3}\b", re.IGNORECASE)
+
+
+def _extract(pattern: re.Pattern[str], prompt: str) -> list[str]:
+    """Entity extraction the stand-in can actually do.
+
+    Without this the mock returns no entities at all, so every question falls
+    through to the unscoped ranking branch — and "are we affected by
+    CVE-1999-00000?" comes back with the global top five, which is precisely
+    the fabrication the suite is meant to catch.
+    """
+    seen: list[str] = []
+    for match in pattern.findall(prompt):
+        value = match.upper()
+        if value not in seen:
+            seen.append(value)
+    return seen[:10]
+
+
 def _digest(*parts: str) -> str:
     return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
 
@@ -133,7 +154,6 @@ _FIELD_DEFAULTS: dict[str, Any] = {
     "retained_mappings": [],
     "staleness_warnings": [],
     "result_limit": 5,
-    "cve_ids": [],
     "advisory_ids": [],
     "application_names": [],
     "asset_hostnames": [],
@@ -160,6 +180,10 @@ def _from_schema(
 
     if field_name == "response_mode":
         return _guess_mode(prompt)
+    if field_name == "cve_ids":
+        return _extract(_CVE_RE, prompt)
+    if field_name == "advisory_ids":
+        return _extract(_GHSA_RE, prompt)
     if field_name == "intent":
         # Derived from the prompt rather than picked from the enum by hash.
         # A stand-in that routes "we can only patch 20 today" to an asset
